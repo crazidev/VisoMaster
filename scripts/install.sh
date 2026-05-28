@@ -72,7 +72,10 @@ echo ""
 
 # ── Step 1: Submodules ────────────────────────────────────────────────────────
 echo "[1/5] Initialising git submodules..."
-if command -v git &>/dev/null; then
+if [[ ! -d ".git" ]]; then
+    echo "      [SKIP] No .git directory found — running inside Docker or a zip extract."
+    echo "             Submodules are pre-initialised in the image."
+elif command -v git &>/dev/null; then
     git submodule update --init --recursive
     echo "      Done."
 else
