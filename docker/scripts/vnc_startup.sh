@@ -24,10 +24,19 @@ echo "============================================================" | tee -a $LO
 
 # ── VNC password ──────────────────────────────────────────────────────────────
 mkdir -p ~/.vnc
+
+# TigerVNC ships vncpasswd as /usr/bin/tigervncpasswd on some distros;
+# fall back to the plain vncpasswd name if the prefixed one isn't found.
+VNCPASSWD_BIN=$(command -v tigervncpasswd 2>/dev/null || command -v vncpasswd 2>/dev/null || true)
+if [ -z "$VNCPASSWD_BIN" ]; then
+    echo "[VNC] ERROR: neither tigervncpasswd nor vncpasswd found in PATH" | tee -a $LOG
+    exit 1
+fi
+
 if [[ "$VNC_PASSWORDLESS" == "true" ]]; then
-    echo "" | vncpasswd -f > ~/.vnc/passwd
+    echo "" | "$VNCPASSWD_BIN" -f > ~/.vnc/passwd
 else
-    echo "$VNC_PW" | vncpasswd -f > ~/.vnc/passwd
+    echo "$VNC_PW" | "$VNCPASSWD_BIN" -f > ~/.vnc/passwd
 fi
 chmod 600 ~/.vnc/passwd
 

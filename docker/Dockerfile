@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Build tools
     build-essential cmake pkg-config \
     # VNC / display
-    tigervnc-standalone-server tigervnc-common \
+    tigervnc-standalone-server tigervnc-common tigervnc-tools \
     xfce4 xfce4-terminal xfce4-taskmanager \
     dbus-x11 x11-utils x11-xserver-utils xdg-utils \
     # Python / OpenCV runtime libs
