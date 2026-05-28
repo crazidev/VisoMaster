@@ -46,13 +46,22 @@ rm -f /tmp/.X*-lock /tmp/.X11-unix/X${DISPLAY#:} 2>/dev/null || true
 
 # ── Start TigerVNC ────────────────────────────────────────────────────────────
 echo "[VNC] Starting TigerVNC on display $DISPLAY (${VNC_RESOLUTION})..." | tee -a $LOG
-vncserver $DISPLAY \
-    -depth $VNC_COL_DEPTH \
-    -geometry $VNC_RESOLUTION \
-    -rfbport $VNC_PORT \
-    -rfbauth ~/.vnc/passwd \
-    -SecurityTypes VncAuth \
-    -fg &
+if [[ "$VNC_PASSWORDLESS" == "true" ]]; then
+    vncserver $DISPLAY \
+        -depth $VNC_COL_DEPTH \
+        -geometry $VNC_RESOLUTION \
+        -rfbport $VNC_PORT \
+        -SecurityTypes None \
+        -fg &
+else
+    vncserver $DISPLAY \
+        -depth $VNC_COL_DEPTH \
+        -geometry $VNC_RESOLUTION \
+        -rfbport $VNC_PORT \
+        -rfbauth ~/.vnc/passwd \
+        -SecurityTypes VncAuth \
+        -fg &
+fi
 VNC_PID=$!
 
 # Wait for VNC to be ready
