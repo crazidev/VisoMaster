@@ -70,18 +70,6 @@ echo "  OS: $OS | CUDA: $CUDA_VER | Models: $MODEL_MODE"
 echo "============================================================"
 echo ""
 
-# ── Step 1: Submodules ────────────────────────────────────────────────────────
-echo "[1/5] Initialising git submodules..."
-if [[ ! -d ".git" ]]; then
-    echo "      [SKIP] No .git directory found — running inside Docker or a zip extract."
-    echo "             Submodules are pre-initialised in the image."
-elif command -v git &>/dev/null; then
-    git submodule update --init --recursive
-    echo "      Done."
-else
-    echo "      [WARN] git not found — skipping submodule init."
-fi
-
 # ── Step 2: System dependencies (Linux only) ──────────────────────────────────
 if [[ "$OS" == "linux" ]]; then
     echo "[2/5] Installing system dependencies..."
