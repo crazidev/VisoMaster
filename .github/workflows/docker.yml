@@ -22,9 +22,7 @@ jobs:
         variant:
           - tag: cu124
             dockerfile: docker/Dockerfile
-          - tag: cu118
-            dockerfile: docker/Dockerfile.cuda118
-
+            
     steps:
       - name: Checkout
         uses: actions/checkout@v4
