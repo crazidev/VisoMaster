@@ -6,9 +6,9 @@ on:
       - main
     tags:
       - "v*"
-  pull_request:
-    branches:
-      - main
+  # pull_request:
+  #   branches:
+  #     - main
   workflow_dispatch:
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.variant.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ vars.DOCKER_USER }}/visomaster:latest-${{ matrix.variant.tag }}
-          outputs: ${{ github.event_name == 'pull_request' && 'type=cacheonly' || 'type=registry' }}
           cache-from: type=registry,ref=${{ vars.DOCKER_USER }}/visomaster:buildcache-${{ matrix.variant.tag }}
-          cache-to: type=registry,ref=${{ vars.DOCKER_USER }}/visomaster:buildcache-${{ matrix.variant.tag }},mode=max
+          cache-to: type=registry,ref=${{ vars.DOCKER_USER }}/visomaster:buildcache-${{ matrix.variant.tag }},mode=min
