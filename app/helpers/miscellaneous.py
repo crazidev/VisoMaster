@@ -159,6 +159,9 @@ def save_thumbnail(frame, thumbnail_path):
 
 def get_dfm_models_data():
     DFM_MODELS_DATA.clear()
+    if not os.path.isdir(DFM_MODELS_PATH):
+        os.makedirs(DFM_MODELS_PATH, exist_ok=True)
+        return DFM_MODELS_DATA
     for dfm_file in os.listdir(DFM_MODELS_PATH):
         if dfm_file.endswith(('.dfm','.onnx')):
             DFM_MODELS_DATA[dfm_file] = f'{DFM_MODELS_PATH}/{dfm_file}'
