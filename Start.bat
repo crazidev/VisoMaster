@@ -87,9 +87,14 @@ IF "%BUN_CMD%"=="" (
 
 IF NOT EXIST "%APP_ROOT%\logs" mkdir "%APP_ROOT%\logs"
 
-:: Start Vite dev server hidden, save PID to file
-echo  [1/2] Starting Vite dev server ^(%BUN_CMD% run dev^)...
-powershell -NoProfile -Command "$p = Start-Process -FilePath '%BUN_CMD%' -ArgumentList 'run','dev' -WorkingDirectory '%APP_ROOT%\visomaster-ui' -WindowStyle Hidden -RedirectStandardOutput '%APP_ROOT%\logs\vite.log' -RedirectStandardError '%APP_ROOT%\logs\vite.err.log' -PassThru; $p.Id | Out-File -FilePath '%APP_ROOT%\logs\vite.pid' -Encoding ascii"
+:: Use built dist if available, otherwise fall back to dev server
+IF EXIST "%APP_ROOT%\visomaster-ui\dist\index.html" (
+    echo  [1/2] Built dist found -- starting Vite preview server...
+    powershell -NoProfile -Command "$p = Start-Process -FilePath '%BUN_CMD%' -ArgumentList 'run','preview' -WorkingDirectory '%APP_ROOT%\visomaster-ui' -WindowStyle Hidden -RedirectStandardOutput '%APP_ROOT%\logs\vite.log' -RedirectStandardError '%APP_ROOT%\logs\vite.err.log' -PassThru; $p.Id | Out-File -FilePath '%APP_ROOT%\logs\vite.pid' -Encoding ascii"
+) ELSE (
+    echo  [1/2] No dist build found -- starting Vite dev server...
+    powershell -NoProfile -Command "$p = Start-Process -FilePath '%BUN_CMD%' -ArgumentList 'run','dev' -WorkingDirectory '%APP_ROOT%\visomaster-ui' -WindowStyle Hidden -RedirectStandardOutput '%APP_ROOT%\logs\vite.log' -RedirectStandardError '%APP_ROOT%\logs\vite.err.log' -PassThru; $p.Id | Out-File -FilePath '%APP_ROOT%\logs\vite.pid' -Encoding ascii"
+)
 SET /P VITE_PID=<"%APP_ROOT%\logs\vite.pid"
 
 :: Give Vite a moment to bind before Qt opens the webview
@@ -141,9 +146,14 @@ SET /P API_PID=<"%APP_ROOT%\logs\api.pid"
 echo  Waiting for API server to start...
 timeout /t 3 /nobreak >nul
 
-:: Start Vite dev server hidden, save PID to file
-echo  [2/2] Starting Vite dev server ^(%BUN_CMD% run dev^)...
-powershell -NoProfile -Command "$p = Start-Process -FilePath '%BUN_CMD%' -ArgumentList 'run','dev' -WorkingDirectory '%APP_ROOT%\visomaster-ui' -WindowStyle Hidden -RedirectStandardOutput '%APP_ROOT%\logs\vite.log' -RedirectStandardError '%APP_ROOT%\logs\vite.err.log' -PassThru; $p.Id | Out-File -FilePath '%APP_ROOT%\logs\vite.pid' -Encoding ascii"
+:: Use built dist if available, otherwise fall back to dev server
+IF EXIST "%APP_ROOT%\visomaster-ui\dist\index.html" (
+    echo  [2/2] Built dist found -- starting Vite preview server...
+    powershell -NoProfile -Command "$p = Start-Process -FilePath '%BUN_CMD%' -ArgumentList 'run','preview' -WorkingDirectory '%APP_ROOT%\visomaster-ui' -WindowStyle Hidden -RedirectStandardOutput '%APP_ROOT%\logs\vite.log' -RedirectStandardError '%APP_ROOT%\logs\vite.err.log' -PassThru; $p.Id | Out-File -FilePath '%APP_ROOT%\logs\vite.pid' -Encoding ascii"
+) ELSE (
+    echo  [2/2] No dist build found -- starting Vite dev server...
+    powershell -NoProfile -Command "$p = Start-Process -FilePath '%BUN_CMD%' -ArgumentList 'run','dev' -WorkingDirectory '%APP_ROOT%\visomaster-ui' -WindowStyle Hidden -RedirectStandardOutput '%APP_ROOT%\logs\vite.log' -RedirectStandardError '%APP_ROOT%\logs\vite.err.log' -PassThru; $p.Id | Out-File -FilePath '%APP_ROOT%\logs\vite.pid' -Encoding ascii"
+)
 SET /P VITE_PID=<"%APP_ROOT%\logs\vite.pid"
 
 echo.

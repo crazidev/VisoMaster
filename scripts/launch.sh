@@ -89,17 +89,32 @@ case "$MODE" in
     webview)
         echo "  Starting Qt + WebView UI..."
         echo ""
-        echo "  NOTE: The Vite dev server must be running."
-        echo "  In a separate terminal: cd visomaster-ui && bun run dev"
-        echo ""
 
-        # Check if Vite dev server is already up
         VITE_PORT="${VITE_PORT:-5173}"
-        if command -v curl &>/dev/null; then
-            if ! curl -sf "http://localhost:${VITE_PORT}" > /dev/null 2>&1; then
-                echo "  [WARN] Vite dev server not detected on port ${VITE_PORT}."
-                echo "         Start it first or the webview will show a blank page."
-                echo ""
+
+        # Use built dist if available, otherwise fall back to dev server
+        if [[ -d "visomaster-ui/dist" ]]; then
+            echo "  [1/2] Built dist found — starting Vite preview server..."
+            if command -v bun &>/dev/null; then
+                (cd visomaster-ui && bun run preview --port "$VITE_PORT") &
+            elif command -v npm &>/dev/null; then
+                (cd visomaster-ui && npm run preview -- --port "$VITE_PORT") &
+            else
+                echo "  [ERROR] bun or npm required. Install bun: https://bun.sh"
+                exit 1
+            fi
+            UI_PID=$!
+            sleep 2
+        else
+            echo "  NOTE: No dist build found — Vite dev server must be running."
+            echo "  Run: cd visomaster-ui && bun run dev"
+            echo ""
+            if command -v curl &>/dev/null; then
+                if ! curl -sf "http://localhost:${VITE_PORT}" > /dev/null 2>&1; then
+                    echo "  [WARN] Vite dev server not detected on port ${VITE_PORT}."
+                    echo "         Start it first or the webview will show a blank page."
+                    echo ""
+                fi
             fi
         fi
 
@@ -129,15 +144,28 @@ case "$MODE" in
         # Wait briefly for the server to be ready
         sleep 2
 
-        # Start Vite dev server in background
-        echo "  [2/2] Starting Vite dev server (visomaster-ui)..."
-        if command -v bun &>/dev/null; then
-            (cd visomaster-ui && bun run dev) &
-        elif command -v npm &>/dev/null; then
-            (cd visomaster-ui && npm run dev) &
+        # Use built dist if available, otherwise fall back to dev server
+        VITE_PORT="${VITE_PORT:-5173}"
+        if [[ -d "visomaster-ui/dist" ]]; then
+            echo "  [2/2] Built dist found — starting Vite preview server..."
+            if command -v bun &>/dev/null; then
+                (cd visomaster-ui && bun run preview --port "$VITE_PORT") &
+            elif command -v npm &>/dev/null; then
+                (cd visomaster-ui && npm run preview -- --port "$VITE_PORT") &
+            else
+                echo "  [ERROR] bun or npm required. Install bun: https://bun.sh"
+                exit 1
+            fi
         else
-            echo "  [ERROR] bun or npm required for web mode. Install bun: https://bun.sh"
-            exit 1
+            echo "  [2/2] No dist build found — starting Vite dev server..."
+            if command -v bun &>/dev/null; then
+                (cd visomaster-ui && bun run dev) &
+            elif command -v npm &>/dev/null; then
+                (cd visomaster-ui && npm run dev) &
+            else
+                echo "  [ERROR] bun or npm required. Install bun: https://bun.sh"
+                exit 1
+            fi
         fi
         UI_PID=$!
 

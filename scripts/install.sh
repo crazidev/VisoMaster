@@ -156,11 +156,11 @@ if [[ -d "visomaster-ui" ]]; then
     fi
 
     if command -v bun &>/dev/null; then
-        (cd visomaster-ui && bun install)
+        (cd visomaster-ui && bun install && bun run build)
         echo "      Done (bun)."
     elif command -v npm &>/dev/null; then
         echo "      [WARN] Falling back to npm. Install bun for faster installs: https://bun.sh"
-        (cd visomaster-ui && npm install)
+        (cd visomaster-ui && npm install && npm run build)
         echo "      Done (npm)."
     else
         echo "      [ERROR] Neither bun nor npm is available. Install bun: https://bun.sh/docs/installation"
