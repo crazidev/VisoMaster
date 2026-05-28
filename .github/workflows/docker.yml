@@ -45,5 +45,3 @@ jobs:
           file: ${{ matrix.variant.dockerfile }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ vars.DOCKER_USER }}/visomaster:latest-${{ matrix.variant.tag }}
-          cache-from: type=registry,ref=${{ vars.DOCKER_USER }}/visomaster:buildcache-${{ matrix.variant.tag }}
-          cache-to: type=registry,ref=${{ vars.DOCKER_USER }}/visomaster:buildcache-${{ matrix.variant.tag }},mode=min
