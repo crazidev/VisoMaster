@@ -4,7 +4,7 @@
 # Clones the repo (if not already present) and runs the install script.
 #
 # Run this on a fresh machine / RunPod instance:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/visomaster/VisoMaster/main/scripts/bootstrap.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/crazidev/VisoMaster/main/scripts/bootstrap.sh)
 #
 # Or after manually downloading this file:
 #   bash bootstrap.sh [--dir <path>] [--branch <branch>] [--dev|--full] [--cuda 124|--cuda 118] [--mode <mode>]
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-REPO_URL="https://github.com/visomaster/VisoMaster.git"
+REPO_URL="https://github.com/crazidev/VisoMaster.git"
 INSTALL_DIR="${HOME}/VisoMaster"
 BRANCH="main"
 MODEL_MODE="--dev"
