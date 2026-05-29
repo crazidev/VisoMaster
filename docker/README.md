@@ -157,17 +157,41 @@ sleep infinity
 
 ## Vast.ai setup
 
-- **Image path/tag**: `your-dockerhub/visomaster:latest`
-- **Docker options**:
-  ```
-  -p 5901:5901 -p 6901:6901 -p 8000:8000 -p 8585:8585
-  -p 8765:8765 -p 9090:9090 -p 9091:9091
-  -p 10000:10000/udp
-  -p 5000:5000/udp -p 5001:5001/udp
-  -e VNC_PASSWORDLESS=true -e VNC_RESOLUTION=1280x800
-  ```
-- **Launch mode**: `Run interactive shell server, SSH` → check `Use direct SSH connection`
-- **On-start script**: same as RunPod above
+Vast.ai loads the image and starts an SSH server — it does **not** run the Docker `ENTRYPOINT` automatically. You must call the startup script explicitly in the **on-start script** field.
+
+1. **Image path/tag**: `your-dockerhub/visomaster:latest`
+
+2. **Launch mode**: `Run interactive shell server, SSH` → check `Use direct SSH connection`
+
+3. **Exposed ports** (add these in the instance config):
+   ```
+   6901 8000 8585 8765 9091
+   ```
+   For TCP-only access (no UDP forwarding on vast.ai's HTTP proxy):
+   - `6901` → noVNC desktop
+   - `8000` → VisoMaster Web UI
+   - `8585` → filebrowser
+   - `8765` → WS preview stream
+   - `9091` → streamrelay WebRTC client
+
+4. **Environment variables**:
+   ```
+   VNC_PASSWORDLESS=true
+   VNC_RESOLUTION=1280x800
+   SKIP_MODEL_DOWNLOAD=0
+   ```
+
+5. **On-start script** (paste into the "On-start script" field):
+   ```bash
+   env | grep _ >> /etc/environment
+   nohup /dockerstartup/vnc_startup.sh --wait > /workspace/logs/startup.log 2>&1 &
+   ```
+   The `nohup ... &` is required — vast.ai's on-start script runner will kill any foreground process when it exits. This detaches the startup script so it keeps running.
+
+6. **Container disk**: minimum 30 GB  
+   **Volume disk**: 50+ GB recommended (mount at `/workspace/data`)
+
+> **Note on UDP / WebRTC**: Vast.ai's HTTP proxy only forwards TCP. Raw UDP (WebRTC media on port 10000, UDP input on port 5000) will not work through the proxied URL. Use Tailscale for full UDP access — see the Tailscale section below.
 
 ## OBS Studio
 
