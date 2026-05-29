@@ -73,6 +73,13 @@ def _parse_args(argv: list[str]) -> tuple[argparse.Namespace, list[str]]:
 if __name__ == "__main__":
     args, qt_argv = _parse_args(sys.argv[1:])
 
+    # Qt WebEngine (Chromium) refuses to run as root without --no-sandbox.
+    # Inject the flag automatically when running as root on Linux/macOS.
+    import os
+    if sys.platform != "win32" and os.getuid() == 0:
+        if "--no-sandbox" not in qt_argv:
+            qt_argv.append("--no-sandbox")
+
     app = QtWidgets.QApplication([sys.argv[0], *qt_argv])
 
     # Allow Ctrl+C to close gracefully
