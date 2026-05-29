@@ -87,11 +87,12 @@ if __name__ == "__main__":
     app.setStyle(ProxyStyle())
     with open("app/ui/styles/dark_styles.qss", "r") as f:
         _style = f.read()
-        _style = (
-            qdarktheme.load_stylesheet(custom_colors={"primary": "#4facc9"})
-            + "\n"
-            + _style
-        )
+        try:
+            _base = qdarktheme.load_stylesheet(custom_colors={"primary": "#4facc9"})
+        except TypeError:
+            # qdarktheme < 2.1 does not support custom_colors
+            _base = qdarktheme.load_stylesheet()
+        _style = _base + "\n" + _style
         app.setStyleSheet(_style)
 
     window = WebMainWindow(

@@ -24,7 +24,7 @@ onnxsim
 requests
 pyqt-toast-notification==1.3.2
 qdarkstyle
-pyqtdarktheme
+pyqtdarktheme>=2.1.0
 aiortc
 aiohttp
 cryptography
