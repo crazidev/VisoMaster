@@ -108,7 +108,9 @@ RUN wget -q -O - https://raw.githubusercontent.com/filebrowser/get/master/get.sh
 COPY . $VISOMASTER_HOME/
 WORKDIR $VISOMASTER_HOME
 
-RUN git submodule update --init --recursive 2>/dev/null || true
+RUN git submodule sync --recursive \
+    && git submodule update --init --recursive \
+    || echo "[docker] WARNING: submodule init failed — packages/streamrelay may be empty"
 
 RUN mkdir -p $STARTUPDIR /workspace/logs
 

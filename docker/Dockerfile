@@ -143,7 +143,9 @@ COPY . $VISOMASTER_HOME/
 WORKDIR $VISOMASTER_HOME
 
 # Initialise git submodules (streamrelay)
-RUN git submodule update --init --recursive 2>/dev/null || true
+RUN git submodule sync --recursive \
+    && git submodule update --init --recursive \
+    || echo "[docker] WARNING: submodule init failed — packages/streamrelay may be empty"
 
 # ── Startup infrastructure ────────────────────────────────────────────────────
 RUN mkdir -p $STARTUPDIR /workspace/logs
