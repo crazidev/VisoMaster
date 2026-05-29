@@ -41,9 +41,12 @@ services:
       - "8000:8000"       # VisoMaster FastAPI server
       - "5173:5173"       # Vite dev server (React web UI)
       - "8585:8585"       # filebrowser
-      - "9091:9091"       # streamrelay WebRTC signaling
-      - "10000:10000"     # WebRTC media (TCP)
+      - "8765:8765"       # WS output preview stream (always-on)
+      - "9090:9090"       # streamrelay WebRTC signaling HTTPS
+      - "9091:9091"       # streamrelay WebRTC signaling HTTP
       - "10000:10000/udp" # WebRTC media (UDP)
+      - "5000:5000/udp"   # UDP input (MPEG-TS ingest)
+      - "5001:5001/udp"   # UDP output (MPEG-TS egress)
 
     # Persistent volume — models, outputs, workspace state survive restarts
     volumes:

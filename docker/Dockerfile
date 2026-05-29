@@ -2,7 +2,7 @@ FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 LABEL maintainer="VisoMaster" \
       description="VisoMaster headless VNC container with OBS, filebrowser, noVNC" \
-      io.openshift.expose-services="6901:http,5901:xvnc,8000:http,5173:http,8585:http,9091:http,10000:webrtc"
+      io.openshift.expose-services="6901:http,5901:xvnc,8000:http,5173:http,8585:http,8765:ws,9090:https,9091:http,10000:webrtc,5000:udp,5001:udp"
 
 # ── Ports ─────────────────────────────────────────────────────────────────────
 # 5901  TigerVNC
@@ -10,9 +10,13 @@ LABEL maintainer="VisoMaster" \
 # 8000  VisoMaster FastAPI server
 # 5173  Vite dev server (React web UI)
 # 8585  filebrowser
-# 9091  streamrelay WebRTC signaling + web client
-# 10000 WebRTC media channel (TCP + UDP)
-EXPOSE 5901 6901 8000 5173 8585 9091 10000/tcp 10000/udp
+# 8765  WS output preview stream (always-on)
+# 9090  streamrelay WebRTC signaling HTTPS
+# 9091  streamrelay WebRTC signaling HTTP + web client
+# 10000 WebRTC media channel (UDP only)
+# 5000  UDP input (MPEG-TS ingest)
+# 5001  UDP output (MPEG-TS egress)
+EXPOSE 5901 6901 8000 5173 8585 8765 9090 9091 10000/udp 5000/udp 5001/udp
 
 # ── Base env ──────────────────────────────────────────────────────────────────
 ENV DEBIAN_FRONTEND=noninteractive \

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
 import { FolderOpen, RefreshCw, Search, ImageIcon, Video, FolderTree, FolderSearch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store/appStore'
 import { api } from '@/api/client'
@@ -9,17 +10,17 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { FolderBrowser } from './FolderBrowser'
 
-const LS_FOLDER    = 'vm_media_folder'
+const LS_FOLDER = 'vm_media_folder'
 const LS_RECURSIVE = 'vm_media_recursive'
 
 export function MediaSource() {
   const { mediaList, setMediaList, selectedMediaId, setSelectedMediaId, setPlayback,
-          lastMediaFolder, setLastMediaFolder } = useAppStore()
-  const [search, setSearch]         = useState('')
+    lastMediaFolder, setLastMediaFolder } = useAppStore()
+  const [search, setSearch] = useState('')
   const [showImages, setShowImages] = useState(true)
   const [showVideos, setShowVideos] = useState(true)
   const [folderPath, setFolderPath] = useState(() => lastMediaFolder || (localStorage.getItem(LS_FOLDER) ?? ''))
-  const [recursive, setRecursive]   = useState(() => localStorage.getItem(LS_RECURSIVE) === 'true')
+  const [recursive, setRecursive] = useState(() => localStorage.getItem(LS_RECURSIVE) === 'true')
   const [isScanning, setIsScanning] = useState(false)
   const [showBrowser, setShowBrowser] = useState(false)
   const pathInputRef = useRef<HTMLInputElement>(null)
@@ -34,9 +35,9 @@ export function MediaSource() {
     try {
       const res = await transport.scanFolder(trimmed, rec)
       const cards = res.items.map(item => ({
-        media_id:      item.media_id,
-        media_path:    item.media_path,
-        file_type:     item.file_type,
+        media_id: item.media_id,
+        media_path: item.media_path,
+        file_type: item.file_type,
         thumbnail_url: transport.thumbnailUrl('media', item.media_id),
       }))
       setMediaList(cards)
@@ -63,7 +64,7 @@ export function MediaSource() {
   useEffect(() => {
     if (didAutoScan.current) return
     const path = lastMediaFolder || localStorage.getItem(LS_FOLDER) || ''
-    const rec  = localStorage.getItem(LS_RECURSIVE) === 'true'
+    const rec = localStorage.getItem(LS_RECURSIVE) === 'true'
     if (path) {
       didAutoScan.current = true
       doScan(path, rec)
@@ -117,7 +118,7 @@ export function MediaSource() {
       const res = await api.selectMedia(id) as { ok?: boolean; max_frame?: number; fps?: number; file_type?: string } | void
       setSelectedMediaId(id)
       const maxFrame = (res as { max_frame?: number })?.max_frame ?? 0
-      const fps      = (res as { fps?: number })?.fps ?? 0
+      const fps = (res as { fps?: number })?.fps ?? 0
       setPlayback({ current_frame: 0, max_frame: maxFrame, fps, is_playing: maxFrame > 0 })
     } catch (e) { toast.error(String(e)) }
   }
@@ -130,7 +131,7 @@ export function MediaSource() {
           <TooltipTrigger asChild>
             <Button
               variant={showBrowser ? 'default' : 'outline'}
-              size="icon"
+              size="sm"
               className="size-7 shrink-0"
               onClick={handleOpenFolder}
               disabled={isScanning}
@@ -150,14 +151,16 @@ export function MediaSource() {
           </span>
         ) : (
           <>
-            <input
+            <Input
               ref={pathInputRef}
               value={folderPath}
               onChange={e => setFolderPath(e.target.value)}
               onKeyDown={handlePathKeyDown}
               placeholder="Paste folder path and Enter"
               spellCheck={false}
-              className="flex-1 min-w-0 px-2 py-1 text-xs bg-muted border border-border rounded text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+              //@ts-ignore
+              size={'sm'}
+              className="flex-1 size-7 min-w-0 font-mono"
             />
 
             <Tooltip>
@@ -210,11 +213,11 @@ export function MediaSource() {
         <div className="flex items-center gap-1.5 px-2 py-1.5 border-b">
           <div className="flex-1 relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground size-3" />
-            <input
+            <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search…"
-              className="w-full pl-6 pr-2 py-1 text-xs bg-muted border border-border rounded text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-full pl-6 pr-2"
             />
           </div>
           <Tooltip>
@@ -288,11 +291,11 @@ export function MediaSource() {
 // Browser mode: uses the HTTP thumbnail URL directly.
 
 interface MediaCardProps {
-  mediaId:   string
+  mediaId: string
   mediaPath: string
-  fileType:  string
-  selected:  boolean
-  onSelect:  (id: string) => void
+  fileType: string
+  selected: boolean
+  onSelect: (id: string) => void
 }
 
 function MediaCard({ mediaId, mediaPath, fileType, selected, onSelect }: MediaCardProps) {
@@ -305,7 +308,7 @@ function MediaCard({ mediaId, mediaPath, fileType, selected, onSelect }: MediaCa
     // Qt mode: fetch thumbnail via async bridge slot
     api.getThumbnail('media', mediaId)
       .then(src => { if (src) setThumbSrc(src) })
-      .catch(() => {})
+      .catch(() => { })
   }, [mediaId])  // intentionally omit thumbSrc — only run once per mediaId
 
   const filename = mediaPath.split(/[\\/]/).pop() ?? mediaPath

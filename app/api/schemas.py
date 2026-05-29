@@ -258,6 +258,69 @@ class StreamTransformRequest(BaseModel):
     flip_v: bool = False
 
 
+# ── UDP streaming ─────────────────────────────────────────────────────────────
+
+class UDPInputStartRequest(BaseModel):
+    port: int = 5000
+    host: str = "0.0.0.0"
+    width: int = 1280
+    height: int = 720
+    fps: float = 30.0
+    input_format: str = ""   # '' = auto, 'h264', 'mjpeg', 'mpegts'
+    buffer_size: int = 4096  # KB
+
+
+class UDPInputStartResponse(BaseModel):
+    url: str
+    port: int
+    width: int
+    height: int
+    fps: float
+
+
+class UDPInputStatusResponse(BaseModel):
+    running: bool
+    url: str = ""
+    port: int = 0
+    state: str = "idle"
+    frames_received: int = 0
+
+
+class UDPOutputStartRequest(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 5001
+    codec: Literal["h264", "h265"] = "h264"
+    bitrate_kbps: int = 4000
+    fps: float = 30.0
+    width: int = 0
+    height: int = 0
+
+
+class UDPOutputStatusResponse(BaseModel):
+    running: bool
+    url: str = ""
+    codec: str = ""
+    bitrate_kbps: int = 0
+    fps: float = 0.0
+    current_fps: float = 0.0
+
+
+# ── WebSocket output ──────────────────────────────────────────────────────────
+
+class WsOutputStartRequest(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 8765
+    quality: int = 75
+
+
+class WsOutputStatusResponse(BaseModel):
+    running: bool
+    url: str = ""
+    quality: int = 75
+    clients: int = 0
+    current_fps: float = 0.0
+
+
 # ── Workspace ─────────────────────────────────────────────────────────────────
 
 class WorkspaceSaveRequest(BaseModel):

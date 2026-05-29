@@ -85,6 +85,41 @@ export const api = {
   stopWebrtc:    () => transport.stopWebrtc(),
   setTransform:  (r: number, h: boolean, v: boolean) => transport.setTransform(r, h, v),
   getState:      () => transport.getState(),
+
+  // UDP input
+  startUdpInput: (body: { port?: number; host?: string; width?: number; height?: number; fps?: number; input_format?: string; buffer_size?: number }) =>
+    channelTransport
+      ? (channelTransport as unknown as { startUdpInput(o: Record<string, unknown>): Promise<{ ok: boolean; url: string; port: number; width: number; height: number; fps: number }> }).startUdpInput(body as Record<string, unknown>)
+      : req<{ url: string; port: number; width: number; height: number; fps: number }>('POST', '/udp/input/start', body),
+  stopUdpInput: () =>
+    channelTransport
+      ? (channelTransport as unknown as { stopUdpInput(): Promise<{ ok: boolean }> }).stopUdpInput()
+      : req<{ ok: boolean; message: string }>('POST', '/udp/input/stop'),
+  getUdpInputStatus: () => req<{ running: boolean; url: string; port: number; state: string; frames_received: number }>('GET', '/udp/input/status'),
+
+  // WebSocket output streaming
+  startWsOutput: (body: { host?: string; port?: number; quality?: number }) =>
+    channelTransport
+      ? (channelTransport as unknown as { startWsOutput(o: Record<string, unknown>): Promise<{ ok: boolean; url: string }> }).startWsOutput(body as Record<string, unknown>)
+      : req<{ ok: boolean; url: string }>('POST', '/ws-output/start', body),
+  stopWsOutput: () =>
+    channelTransport
+      ? (channelTransport as unknown as { stopWsOutput(): Promise<{ ok: boolean; message: string }> }).stopWsOutput()
+      : req<{ ok: boolean; message: string }>('POST', '/ws-output/stop'),
+  getWsOutputStatus: () =>
+    req<{ running: boolean; url: string; clients: number }>('GET', '/ws-output/status'),
+
+  // UDP output
+  startUdpOutput: (body: { host?: string; port?: number; codec?: string; bitrate_kbps?: number; fps?: number; width?: number; height?: number }) =>
+    channelTransport
+      ? (channelTransport as unknown as { startUdpOutput(o: Record<string, unknown>): Promise<{ ok: boolean; url: string }> }).startUdpOutput(body as Record<string, unknown>)
+      : req<{ ok: boolean; message: string }>('POST', '/udp/output/start', body),
+  stopUdpOutput: () =>
+    channelTransport
+      ? (channelTransport as unknown as { stopUdpOutput(): Promise<{ ok: boolean }> }).stopUdpOutput()
+      : req<{ ok: boolean; message: string }>('POST', '/udp/output/stop'),
+  getUdpOutputStatus: () => req<{ running: boolean; url: string; codec: string; bitrate_kbps: number; fps: number; current_fps: number }>('GET', '/udp/output/status'),
+
   patchControl:  (updates: Record<string, unknown>) => {
     Object.entries(updates).forEach(([k, v]) => transport.setControl(k, v))
     return Promise.resolve()

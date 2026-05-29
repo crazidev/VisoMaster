@@ -181,12 +181,15 @@ if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     echo "" | tee -a $LOG
     echo "╔══════════════════════════════════════════════════════════╗" | tee -a $LOG
     echo "  Tailscale connected" | tee -a $LOG
-    echo "  Mode:          $TAILSCALE_MODE" | tee -a $LOG
-    echo "  Tailscale IP:  $TS_IP" | tee -a $LOG
-    echo "  VisoMaster:    http://${TS_IP}:8000" | tee -a $LOG
-    echo "  WebRTC WHIP:   http://${TS_IP}:9091/whip" | tee -a $LOG
-    echo "  filebrowser:   http://${TS_IP}:8585" | tee -a $LOG
-    echo "  noVNC:         http://${TS_IP}:6901/vnc.html" | tee -a $LOG
+    echo "  Mode:            $TAILSCALE_MODE" | tee -a $LOG
+    echo "  Tailscale IP:    $TS_IP" | tee -a $LOG
+    echo "  VisoMaster:      http://${TS_IP}:8000" | tee -a $LOG
+    echo "  WS Preview:      ws://${TS_IP}:8765/ws/preview" | tee -a $LOG
+    echo "  WebRTC WHIP:     http://${TS_IP}:9091/whip" | tee -a $LOG
+    echo "  UDP input:       udp://${TS_IP}:5000" | tee -a $LOG
+    echo "  UDP output:      udp://${TS_IP}:5001" | tee -a $LOG
+    echo "  filebrowser:     http://${TS_IP}:8585" | tee -a $LOG
+    echo "  noVNC:           http://${TS_IP}:6901/vnc.html" | tee -a $LOG
     echo "╚══════════════════════════════════════════════════════════╝" | tee -a $LOG
     echo "" | tee -a $LOG
 

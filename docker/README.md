@@ -4,15 +4,19 @@ Run VisoMaster on cloud GPU services (RunPod, Vast.ai, Lambda Labs) or any Linux
 
 ## What's included
 
-| Service | Port | URL |
-|---|---|---|
-| TigerVNC | 5901 | `vnc://host:5901` |
-| noVNC (browser VNC) | 6901 | `http://host:6901/vnc.html` |
-| VisoMaster API | 8000 | `http://host:8000` |
-| Vite dev server (React UI) | 5173 | `http://host:5173` |
-| filebrowser | 8585 | `http://host:8585` |
-| streamrelay WebRTC | 9091 | `http://host:9091` |
-| WebRTC media | 10000 | TCP + UDP |
+| Service | Port | Protocol | URL |
+|---|---|---|---|
+| TigerVNC | 5901 | TCP | `vnc://host:5901` |
+| noVNC (browser VNC) | 6901 | TCP | `http://host:6901/vnc.html` |
+| VisoMaster API + Web UI | 8000 | TCP | `http://host:8000` |
+| Vite dev server (React UI) | 5173 | TCP | `http://host:5173` |
+| filebrowser | 8585 | TCP | `http://host:8585` |
+| **WS preview stream** | **8765** | **TCP** | `ws://host:8765/ws/preview` |
+| streamrelay WebRTC HTTP | 9091 | TCP | `http://host:9091` |
+| streamrelay WebRTC HTTPS | 9090 | TCP | `https://host:9090` |
+| WebRTC media | 10000 | UDP | — |
+| **UDP input** | **5000** | **UDP** | `udp://host:5000` |
+| **UDP output** | **5001** | **UDP** | `udp://host:5001` |
 
 Desktop icons on the Xfce4 VNC desktop:
 - **VisoMaster** — opens the Web UI
@@ -41,7 +45,10 @@ Open `http://localhost:6901/vnc.html` (password: `visomaster`).
 docker run -d --gpus all \
   -p 5901:5901 -p 6901:6901 \
   -p 8000:8000 -p 8585:8585 \
-  -p 9091:9091 -p 10000:10000 -p 10000:10000/udp \
+  -p 8765:8765 \
+  -p 9090:9090 -p 9091:9091 \
+  -p 10000:10000/udp \
+  -p 5000:5000/udp -p 5001:5001/udp \
   -v visomaster_data:/workspace/data \
   -e VNC_PW=visomaster \
   --privileged \
@@ -68,6 +75,49 @@ docker build -f docker/Dockerfile.cuda118 -t visomaster:cu118 .
 | `SKIP_MODEL_DOWNLOAD` | `0` | Set `1` to skip auto model download on first start |
 | `TAILSCALE_AUTHKEY` | _(empty)_ | Tailscale auth key — enables Tailscale on startup |
 
+## Streaming ports
+
+### WebSocket preview (port 8765)
+
+The WS preview stream starts automatically at launch. Connect any WebSocket client to receive processed frames as JPEG:
+
+```bash
+python preview-ws.py                              # default ws://localhost:8765/ws/preview
+python preview-ws.py ws://100.x.x.x:8765/ws/preview  # via Tailscale
+```
+
+### UDP input (port 5000)
+
+Push MPEG-TS video into VisoMaster from any sender:
+
+```bash
+# From FFmpeg
+ffmpeg -re -i input.mp4 -c:v libx264 -f mpegts udp://host:5000
+
+# From OBS: Settings → Stream → Custom → udp://host:5000
+```
+
+Start the UDP input source from the **Source → Streaming → UDP** panel in the UI.
+
+### UDP output (port 5001)
+
+Pull the processed stream from VisoMaster:
+
+```bash
+ffplay -fflags nobuffer -flags low_delay udp://localhost:5001
+vlc udp://@:5001
+```
+
+Start UDP output from the **Output → Stream → UDP Output** panel in the UI.
+
+### WebRTC (ports 9090, 9091, 10000)
+
+- **WHIP endpoint**: `http://host:9091/whip` (or `https://host:9090/whip`)
+- **Browser camera client**: `http://host:9091/`
+- **Media channel**: port 10000 UDP
+
+WebRTC is started on-demand when you activate the **Streaming → Browser/WebRTC** source in the UI.
+
 ## Persistent data (volume)
 
 Mount `/workspace/data` to a network volume to persist:
@@ -84,14 +134,18 @@ On first start, models are downloaded automatically into the volume in the backg
 1. **Container image**: build and push to Docker Hub, or use the image tag directly.
 2. **Docker options**:
    ```
-   -p 5901:5901 -p 6901:6901 -p 8000:8000 -p 8585:8585 -p 9091:9091 -p 10000:10000
+   -p 5901:5901 -p 6901:6901 -p 8000:8000 -p 8585:8585
+   -p 8765:8765 -p 9090:9090 -p 9091:9091
+   -p 10000:10000/udp
+   -p 5000:5000/udp -p 5001:5001/udp
    ```
 3. **Volume mount path**: `/workspace/data`
-4. **Expose HTTP ports**: `6901,8000,8585,9091`
-5. **Expose TCP ports**: `5901,10000`
-6. **Environment variables**: `VNC_PW=yourpassword`
-7. **Container disk**: minimum 30 GB
-8. **Volume disk**: 50+ GB recommended
+4. **Expose HTTP ports**: `6901,8000,8585,9091,8765`
+5. **Expose TCP ports**: `5901,9090`
+6. **Expose UDP ports**: `10000,5000,5001`
+7. **Environment variables**: `VNC_PW=yourpassword`
+8. **Container disk**: minimum 30 GB
+9. **Volume disk**: 50+ GB recommended
 
 ### On-start script (RunPod)
 
@@ -106,7 +160,11 @@ sleep infinity
 - **Image path/tag**: `your-dockerhub/visomaster:latest`
 - **Docker options**:
   ```
-  -p 5901:5901 -p 6901:6901 -p 8000:8000 -p 8585:8585 -p 9091:9091 -p 10000:10000 -e VNC_PASSWORDLESS=true -e VNC_RESOLUTION=1280x800
+  -p 5901:5901 -p 6901:6901 -p 8000:8000 -p 8585:8585
+  -p 8765:8765 -p 9090:9090 -p 9091:9091
+  -p 10000:10000/udp
+  -p 5000:5000/udp -p 5001:5001/udp
+  -e VNC_PASSWORDLESS=true -e VNC_RESOLUTION=1280x800
   ```
 - **Launch mode**: `Run interactive shell server, SSH` → check `Use direct SSH connection`
 - **On-start script**: same as RunPod above
@@ -153,13 +211,21 @@ TAILSCALE_AUTHKEY=tskey-auth-xxxxx docker compose up -d
 docker run ... -e TAILSCALE_AUTHKEY=tskey-auth-xxxxx visomaster:latest
 ```
 
-On startup the container logs the Tailscale IP and confirms the mode:
+On startup the container logs the Tailscale IP and all service URLs:
 
 ```
-  Tailscale mode:  kernel
+╔══════════════════════════════════════════════════════════╗
+  Tailscale connected
+  Mode:            kernel (full UDP — WebRTC works)
   Tailscale IP:    100.x.x.x
+  VisoMaster:      http://100.x.x.x:8000
+  WS Preview:      ws://100.x.x.x:8765/ws/preview
   WebRTC WHIP:     http://100.x.x.x:9091/whip
-  VisoMaster UI:   http://100.x.x.x:8000
+  UDP input:       udp://100.x.x.x:5000
+  UDP output:      udp://100.x.x.x:5001
+  filebrowser:     http://100.x.x.x:8585
+  noVNC:           http://100.x.x.x:6901/vnc.html
+╚══════════════════════════════════════════════════════════╝
 ```
 
 Install Tailscale on your PC and join the same tailnet. You can reach the pod directly at its `100.x.x.x` address — no port forwarding, no proxy, full UDP.

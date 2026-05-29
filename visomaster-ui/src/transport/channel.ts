@@ -201,6 +201,24 @@ export class ChannelTransport implements AppTransport {
   stopWebrtc()             { this._send('stopWebrtc') }
   setTransform(r: number, h: boolean, v: boolean) { this._send('setTransform', r, h, v) }
 
+  // ── UDP input / output (Qt bridge) ──────────────────────────────────────
+  startUdpInput(opts: Record<string, unknown>) {
+    return this._call<{ ok: boolean; url: string; port: number; width: number; height: number; fps: number }>(
+      'startUdpInput', JSON.stringify(opts)
+    )
+  }
+  stopUdpInput()  { return this._call<{ ok: boolean; message: string }>('stopUdpInput') }
+  startUdpOutput(opts: Record<string, unknown>) {
+    return this._call<{ ok: boolean; url: string }>('startUdpOutput', JSON.stringify(opts))
+  }
+  stopUdpOutput() { return this._call<{ ok: boolean; message: string }>('stopUdpOutput') }
+
+  // ── WebSocket output (Qt bridge) ─────────────────────────────────────────
+  startWsOutput(opts: Record<string, unknown>) {
+    return this._call<{ ok: boolean; url: string }>('startWsOutput', JSON.stringify(opts))
+  }
+  stopWsOutput() { return this._call<{ ok: boolean; message: string }>('stopWsOutput') }
+
   // ── System ──────────────────────────────────────────────────────────────
   setProvider(p: string)   { this._send('setProvider', p) }
   clearMemory()            { this._send('clearMemory') }

@@ -277,6 +277,14 @@ async def ws_events(websocket: WebSocket):
                         from app.api.routes.sources import stop_webrtc_process
                         stop_webrtc_process(websocket.app.state, vp)
                         bus.emit_sync("webrtc_stopped", {})
+                    elif prev_type in ("srt", "whip"):
+                        # Stop the FFmpeg ingester
+                        ingester = getattr(websocket.app.state, "stream_ingester", None)
+                        if ingester:
+                            ingester.stop()
+                        vp.stop_processing()
+                        vp.file_type = None
+                        bus.emit_sync("ingester_stopped", {"protocol": prev_type})
                     elif prev_type == "webcam":
                         vp.stop_processing()
                         if vp.media_capture:
@@ -291,7 +299,7 @@ async def ws_events(websocket: WebSocket):
                         vp.process_video()
                     elif source == "webcam" and vp.file_type == "webcam":
                         vp.process_video()
-                    elif source == "streaming" and vp.file_type == "webrtc":
+                    elif source == "streaming" and vp.file_type in ("webrtc", "srt", "whip"):
                         vp.process_video()
                     # else: no active source for this tab — stay idle
 

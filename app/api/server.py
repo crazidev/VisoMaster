@@ -340,6 +340,41 @@ async def lifespan(app: FastAPI):
                 frame = numpy.frombuffer(raw, dtype=numpy.uint8).reshape((h, w, 3)).copy()
                 return frame[..., ::-1]   # BGR → RGB
 
+            elif self.file_type == "udp":
+                # UDP ingester — read from UDPIngester frame queue
+                ingester = getattr(self, "_ingester", None)
+                if ingester is None:
+                    return None
+                if not ingester.running and ingester.frames_received > 0:
+                    self.processing = False
+                    return None
+                try:
+                    frame_bgr = ingester.frame_queue.get_nowait()
+                    return frame_bgr[..., ::-1]   # BGR → RGB
+                except Exception:
+                    return None
+
+            elif self.file_type in ("webrtc", "whip"):
+                # streamrelay WebRTC — read from shared memory                if self.webrtc_shm is None:
+                    try:
+                        from multiprocessing.shared_memory import SharedMemory as _SHM
+                        self.webrtc_shm = _SHM(name="visomaster_webrtc_frame", create=False)
+                        print("[VP] Lazily attached WebRTC shared memory.")
+                    except FileNotFoundError:
+                        return None
+                from streamrelay.protocol import SHM_HEADER_BYTES
+                counter = _struct.unpack_from("<I", self.webrtc_shm.buf, 0)[0]
+                if counter == self._last_webrtc_counter or counter == 0:
+                    return None
+                self._last_webrtc_counter = counter
+                w = _struct.unpack_from("<I", self.webrtc_shm.buf, 4)[0]
+                h = _struct.unpack_from("<I", self.webrtc_shm.buf, 8)[0]
+                if w == 0 or h == 0:
+                    return None
+                raw = bytes(self.webrtc_shm.buf[SHM_HEADER_BYTES: SHM_HEADER_BYTES + w * h * 3])
+                frame = numpy.frombuffer(raw, dtype=numpy.uint8).reshape((h, w, 3)).copy()
+                return frame[..., ::-1]   # BGR → RGB
+
             return None
 
         def _update_fps(self) -> None:
@@ -680,10 +715,27 @@ async def lifespan(app: FastAPI):
     app.state.video_processor = vp
     app.state.event_bus = bus
     app.state.webrtc_process = None   # StreamRelay subprocess — shared by sources.py and ws.py
+    app.state.udp_ingester = None     # UDPIngester — created on first UDP input start
+    app.state.udp_output = None       # UDPOutput — created on first UDP output start
+    app.state.ws_output = None        # WsOutput — created on first WS output start
 
     # ── Start event bus broadcast loops ──────────────────────────────────
     loop = asyncio.get_event_loop()
     bus.set_loop(loop)
+
+    # ── Auto-start WsOutput on port 8765 ─────────────────────────────────
+    from app.processors.ws_output import WsOutput as _WsOutput
+    _ws_out = _WsOutput()
+    app.state.ws_output = _ws_out
+    _ws_out.start(host="0.0.0.0", port=8765)
+
+    # Wire into VP's on_frame_done so frames are pushed to WS clients
+    _vp_orig_frame_done = vp.on_frame_done
+    def _ws_on_frame_done(fn, f, s, _out=_ws_out):
+        _vp_orig_frame_done(fn, f, s)
+        if _out._running:
+            _out.push_frame(f)
+    vp.on_frame_done = _ws_on_frame_done
     broadcast_task = asyncio.create_task(bus._broadcast_loop())
     position_task  = asyncio.create_task(bus._position_broadcast_loop())
 
@@ -727,6 +779,16 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, vp.stop_processing)
     vp.disable_virtualcam()
+
+    ingester = getattr(app.state, "udp_ingester", None)
+    if ingester is not None:
+        ingester.stop()
+    udp_out = getattr(app.state, "udp_output", None)
+    if udp_out is not None:
+        udp_out.stop()
+    ws_out = getattr(app.state, "ws_output", None)
+    if ws_out is not None:
+        ws_out.stop()
 
     try:
         with open("last_workspace.json", "w", encoding="utf-8") as f:
@@ -773,6 +835,8 @@ def create_app() -> FastAPI:
     from app.api.ws import router as ws_router
     from app.api.routes.client_log import router as client_log_router
     from app.api.routes.models import router as models_router
+    from app.api.routes.stream_output import router as udp_router
+    from app.api.routes.stream_output import ws_output_router
 
     app.include_router(system_router)
     app.include_router(schema_router)
@@ -786,6 +850,8 @@ def create_app() -> FastAPI:
     app.include_router(ws_router)
     app.include_router(client_log_router)
     app.include_router(models_router)
+    app.include_router(udp_router)
+    app.include_router(ws_output_router)
     return app
 
 

@@ -150,6 +150,15 @@ class WebMainWindow(QtWidgets.QMainWindow):
         self._output_window = None
         self._preview_window = None
 
+        # UDP ingester and output (created lazily by bridge slots)
+        self._udp_ingester = None
+        self._udp_output   = None
+        self._udp_output_orig_cb = None
+
+        # WebSocket preview server thread (started in _init_bridge)
+        self._ws_preview_thread = None
+        self._ws_preview_loop   = None
+
         # Hidden list widgets — needed by list_view_actions helpers
         self.targetVideosList    = QtWidgets.QListWidget()
         self.targetFacesList     = QtWidgets.QListWidget()
@@ -281,7 +290,7 @@ class WebMainWindow(QtWidgets.QMainWindow):
 
         def _on_frame_done(frame_number: int, frame_bgr, is_single_frame: bool):
             pixmap = common_widget_actions.get_pixmap_from_frame(self, frame_bgr)
-            if self.video_processor.file_type in ("webcam", "webrtc") and not is_single_frame:
+            if self.video_processor.file_type in ("webcam", "webrtc", "whip") and not is_single_frame:
                 self.video_processor.webcam_frame_processed_signal.emit(pixmap, frame_bgr)
             elif not is_single_frame:
                 self.video_processor.frame_processed_signal.emit(frame_number, pixmap, frame_bgr)
@@ -353,6 +362,54 @@ class WebMainWindow(QtWidgets.QMainWindow):
 
         self._webview.load(QUrl(VITE_URL))
         self._webview.loadFinished.connect(self._on_load_finished)
+
+        # Start a background asyncio loop, wire it to the EventBus, and
+        # auto-start the WsOutput server so external clients can always connect.
+        self._start_event_bus_loop()
+
+    def _start_event_bus_loop(self) -> None:
+        """Start a background asyncio event loop, wire the EventBus, and
+        auto-start the WsOutput preview server on port 8765.
+        """
+        import asyncio
+        import threading
+        from app.api.events import bus as _bus
+
+        def _run_loop():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._ws_preview_loop = loop
+            _bus.set_loop(loop)
+
+            # Auto-start WsOutput after the loop is running
+            async def _start_ws():
+                from app.processors.ws_output import WsOutput
+                ws_out = WsOutput()
+                self._ws_output = ws_out
+
+                # Wire into VP's on_frame_done
+                vp = self.video_processor
+                _orig = vp.on_frame_done
+                def _combined(fn, f, s, _out=ws_out):
+                    _orig(fn, f, s)
+                    if _out._running:
+                        _out.push_frame(f)
+                vp.on_frame_done = _combined
+                self._ws_output_orig_cb = _orig
+
+                ws_out.start(host="0.0.0.0", port=8765)
+
+            loop.run_until_complete(_start_ws())
+
+            try:
+                loop.run_forever()
+            finally:
+                loop.close()
+
+        self._ws_preview_thread = threading.Thread(
+            target=_run_loop, daemon=True, name="event-bus-loop"
+        )
+        self._ws_preview_thread.start()
 
     def _on_load_finished(self, ok: bool) -> None:
         if not ok:
@@ -443,6 +500,16 @@ class WebMainWindow(QtWidgets.QMainWindow):
             self.webrtc_server_process.terminate()
             self.webrtc_server_process.join(timeout=3)
             self.webrtc_server_process = None
+        if getattr(self, "_udp_ingester", None) is not None:
+            self._udp_ingester.stop()
+            self._udp_ingester = None
+        if getattr(self, "_udp_output", None) is not None:
+            self._udp_output.stop()
+            self._udp_output = None
+
+        # Stop the WebSocket preview server
+        if self._ws_preview_loop is not None and not self._ws_preview_loop.is_closed():
+            self._ws_preview_loop.call_soon_threadsafe(self._ws_preview_loop.stop)
 
         save_load_actions.save_current_workspace(self, "last_workspace.json")
         event.accept()

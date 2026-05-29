@@ -211,8 +211,21 @@ class BackendBridge(QObject):
                 "is_playing":    True,
             })
             QTimer.singleShot(0, lambda j=pos_json: self.framePositionChanged.emit(j))
+
+            # Also push to the /ws/preview WebSocket bus so external clients
+            # (testing.py, ffplay pipe, etc.) can receive frames in Qt mode.
+            # emit_frame_sync() is a no-op when no subscribers are connected,
+            # so this adds zero overhead when nobody is watching.
+            try:
+                from app.api.events import bus as _bus
+                import numpy as _np
+                if isinstance(frame_bgr, _np.ndarray) and frame_bgr.size > 0:
+                    _bus.emit_frame_sync(frame_bgr)
+            except Exception:
+                pass
+
         vp.on_frame_done = _on_frame_done
-        _log("setup", "on_frame_done wrapped → emits framePositionChanged")
+        _log("setup", "on_frame_done wrapped → emits framePositionChanged + bus.emit_frame_sync")
 
         _orig_state_change = vp.on_state_change
         def _on_state_change(event: str, **kwargs):
@@ -966,8 +979,213 @@ class BackendBridge(QObject):
             _log_err("stopWebrtc", str(e))
             return json.dumps({"ok": False, "error": str(e)})
 
-    # ── System slots ──────────────────────────────────────────────────────
+    # ── UDP input / output slots ──────────────────────────────────────────
 
+    @Slot(str, result=str)
+    def startUdpInput(self, options_json: str) -> str:
+        """Start listening for a UDP stream.
+
+        options_json keys: port, host, width, height, fps, input_format, buffer_size
+        """
+        _log("startUdpInput", f"options={options_json}")
+        try:
+            opts = json.loads(options_json) if options_json else {}
+            port         = int(opts.get("port", 5000))
+            host         = str(opts.get("host", "0.0.0.0"))
+            width        = int(opts.get("width", 1280))
+            height       = int(opts.get("height", 720))
+            fps          = float(opts.get("fps", 30.0))
+            input_format = str(opts.get("input_format", ""))
+            buffer_size  = int(opts.get("buffer_size", 4096))
+
+            from app.processors.stream_ingester import UDPIngester
+            mw = self._mw
+            vp = mw.video_processor
+
+            vp.stop_processing()
+            if vp.media_capture:
+                try:
+                    vp.media_capture.release()
+                except Exception:
+                    pass
+                vp.media_capture = None
+
+            if not hasattr(mw, "_udp_ingester") or mw._udp_ingester is None:
+                mw._udp_ingester = UDPIngester()
+            ingester = mw._udp_ingester
+            ingester.start(port=port, host=host, width=width, height=height,
+                           fps=fps, input_format=input_format, buffer_size=buffer_size)
+
+            vp.file_type = "udp"
+            vp.media_path = f"UDP:{port}"
+            vp.media_capture = None
+            vp.fps = ingester.fps
+            vp.max_frame_number = 999_999
+            vp.current_frame_number = 0
+            vp._ingester = ingester
+            vp.process_video()
+
+            self._open_preview_window()
+
+            import socket as _socket
+            local_ip = _socket.gethostbyname(_socket.gethostname())
+            url = f"udp://{local_ip}:{port}"
+            _log("startUdpInput", f"listening on {url}")
+
+            QTimer.singleShot(200, self._emit_playback)
+            return json.dumps({
+                "ok": True, "url": url, "port": port,
+                "width": ingester.width, "height": ingester.height, "fps": ingester.fps,
+            })
+        except Exception as e:
+            tb = _tb.format_exc()
+            _log_err("startUdpInput", str(e))
+            print(tb, flush=True)
+            return json.dumps({"ok": False, "error": str(e), "traceback": tb})
+
+    @Slot(result=str)
+    def stopUdpInput(self) -> str:
+        _log("stopUdpInput", "called")
+        try:
+            mw = self._mw
+            vp = mw.video_processor
+            vp.stop_processing()
+            ingester = getattr(mw, "_udp_ingester", None)
+            if ingester:
+                ingester.stop()
+            vp.file_type = None
+            self._emit_playback()
+            return json.dumps({"ok": True, "message": "UDP input stopped"})
+        except Exception as e:
+            _log_err("stopUdpInput", str(e))
+            return json.dumps({"ok": False, "error": str(e)})
+
+    @Slot(str, result=str)
+    def startUdpOutput(self, options_json: str) -> str:
+        """Start streaming processed frames to a UDP destination.
+
+        options_json keys: host, port, codec, bitrate_kbps, fps, width, height
+        """
+        _log("startUdpOutput", f"options={options_json}")
+        try:
+            opts = json.loads(options_json) if options_json else {}
+            host         = str(opts.get("host", "127.0.0.1"))
+            port         = int(opts.get("port", 5001))
+            codec        = str(opts.get("codec", "h264"))
+            bitrate_kbps = int(opts.get("bitrate_kbps", 4000))
+            fps          = float(opts.get("fps", 30.0))
+            width        = int(opts.get("width", 0))
+            height       = int(opts.get("height", 0))
+
+            from app.processors.stream_output import UDPOutput
+            mw = self._mw
+            vp = mw.video_processor
+
+            if not hasattr(mw, "_udp_output") or mw._udp_output is None:
+                mw._udp_output = UDPOutput()
+            udp_out = mw._udp_output
+            udp_out.stop()
+            udp_out.start(host=host, port=port, codec=codec,
+                          bitrate_kbps=bitrate_kbps, fps=fps, width=width, height=height)
+
+            # Wrap on_frame_done to also push to UDP output
+            _orig = vp.on_frame_done
+            def _combined(fn, f, s, _out=udp_out):
+                _orig(fn, f, s)
+                if _out._running:   # use _running flag, not .running property
+                    _out.push_frame(f)
+            vp.on_frame_done = _combined
+            mw._udp_output_orig_cb = _orig
+
+            url = f"udp://{host}:{port}"
+            _log("startUdpOutput", f"streaming to {url}")
+            return json.dumps({"ok": True, "url": url})
+        except Exception as e:
+            tb = _tb.format_exc()
+            _log_err("startUdpOutput", str(e))
+            print(tb, flush=True)
+            return json.dumps({"ok": False, "error": str(e), "traceback": tb})
+
+    @Slot(result=str)
+    def stopUdpOutput(self) -> str:
+        _log("stopUdpOutput", "called")
+        try:
+            mw = self._mw
+            vp = mw.video_processor
+            udp_out = getattr(mw, "_udp_output", None)
+            if udp_out:
+                udp_out.stop()
+            orig = getattr(mw, "_udp_output_orig_cb", None)
+            if orig is not None:
+                vp.on_frame_done = orig
+                mw._udp_output_orig_cb = None
+            return json.dumps({"ok": True, "message": "UDP output stopped"})
+        except Exception as e:
+            _log_err("stopUdpOutput", str(e))
+            return json.dumps({"ok": False, "error": str(e)})
+
+    # ── WebSocket output slots ────────────────────────────────────────────
+
+    @Slot(str, result=str)
+    def startWsOutput(self, options_json: str) -> str:
+        """Start a standalone WebSocket server that pushes processed frames as JPEG.
+
+        options_json keys: host, port, quality
+        """
+        _log("startWsOutput", f"options={options_json}")
+        try:
+            opts = json.loads(options_json) if options_json else {}
+            host    = str(opts.get("host", "0.0.0.0"))
+            port    = int(opts.get("port", 8765))
+            quality = int(opts.get("quality", 75))
+
+            from app.processors.ws_output import WsOutput
+            mw = self._mw
+            vp = mw.video_processor
+
+            if not hasattr(mw, "_ws_output") or mw._ws_output is None:
+                mw._ws_output = WsOutput()
+            ws_out = mw._ws_output
+            ws_out.stop()
+            ws_out.start(host=host, port=port, quality=quality)
+
+            # Wrap on_frame_done to also push to WS output
+            _orig = vp.on_frame_done
+            def _combined(fn, f, s, _out=ws_out):
+                _orig(fn, f, s)
+                if _out._running:
+                    _out.push_frame(f)
+            vp.on_frame_done = _combined
+            mw._ws_output_orig_cb = _orig
+
+            url = f"ws://{host}:{port}"
+            _log("startWsOutput", f"streaming to {url}")
+            return json.dumps({"ok": True, "url": url})
+        except Exception as e:
+            tb = _tb.format_exc()
+            _log_err("startWsOutput", str(e))
+            print(tb, flush=True)
+            return json.dumps({"ok": False, "error": str(e), "traceback": tb})
+
+    @Slot(result=str)
+    def stopWsOutput(self) -> str:
+        _log("stopWsOutput", "called")
+        try:
+            mw = self._mw
+            vp = mw.video_processor
+            ws_out = getattr(mw, "_ws_output", None)
+            if ws_out:
+                ws_out.stop()
+            orig = getattr(mw, "_ws_output_orig_cb", None)
+            if orig is not None:
+                vp.on_frame_done = orig
+                mw._ws_output_orig_cb = None
+            return json.dumps({"ok": True, "message": "WS output stopped"})
+        except Exception as e:
+            _log_err("stopWsOutput", str(e))
+            return json.dumps({"ok": False, "error": str(e)})
+
+    # ── System slots ──────────────────────────────────────────────────────
     @Slot(result=str)
     def getGpuMemory(self) -> str:
         """Return current GPU memory usage as JSON — used by the frontend for polling."""
@@ -999,7 +1217,7 @@ class BackendBridge(QObject):
                 mw.webcam_rotation = rotation
                 mw.webcam_flip_h   = flip_h
                 mw.webcam_flip_v   = flip_v
-            elif vp.file_type == "webrtc":
+            elif vp.file_type in ("webrtc", "whip"):
                 mw.webrtc_rotation = rotation
                 mw.webrtc_flip_h   = flip_h
                 mw.webrtc_flip_v   = flip_v

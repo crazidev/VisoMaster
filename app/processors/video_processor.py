@@ -371,18 +371,42 @@ class VideoProcessor(QObject):
             print(f"[vp:process_video] webcam timers started — read_active={self.frame_read_timer.isActive()} "
                   f"display_active={self.frame_display_timer.isActive()} interval={interval}ms", flush=True)
 
-        elif self.file_type == 'webrtc':
-            print("Calling process_video() on WebRTC stream")
+        elif self.file_type == 'udp':
+            # UDP ingester — read from UDPIngester frame queue
+            label = 'UDP'
+            print(f"Calling process_video() on UDP stream")
+            ingester = getattr(self, '_ingester', None)
+            if ingester is None:
+                print(f"[UDP] ERROR: No ingester available.")
+                self.processing = False
+                self.on_state_change('error', message='No UDP ingester')
+                return
+            self.processing = True
+            self.frames_to_display.clear()
+            self.threads.clear()
+            self.fps_start_time = 0.0
+            self.fps_frame_count = 0
+            self.current_fps = 0.0
+            interval = int(1000 / 30 * 0.8)
+            self.frame_read_timer.timeout.connect(self._process_next_ingester_frame)
+            self.frame_read_timer.start(interval)
+            self.frame_display_timer.timeout.connect(self.display_next_webcam_frame)
+            self.frame_display_timer.start()
+            self.gpu_memory_update_timer.start(5000)
+            print(f"[UDP] Started processing with interval {interval}ms")
+
+        elif self.file_type in ('webrtc', 'whip'):
+            label = 'WebRTC' if self.file_type == 'webrtc' else 'WHIP'
+            print(f"Calling process_video() on {label} stream")
             # Try to attach shared memory if not already done
             if self.webrtc_shm is None:
                 try:
                     from multiprocessing.shared_memory import SharedMemory
                     shm = SharedMemory(name=VISOMASTER_SHM_NAME, create=False)
                     self.webrtc_shm = shm
-                    print("[WebRTC] Shared memory attached successfully")
+                    print(f"[{label}] Shared memory attached successfully")
                 except FileNotFoundError:
-                    print("[WebRTC] Shared memory not found yet — will keep polling until server is ready.")
-                    # Create a polling timer that tries to attach periodically
+                    print(f"[{label}] Shared memory not found yet — will keep polling until server is ready.")
                     self.processing = True
                     self.frames_to_display.clear()
                     self.threads.clear()
@@ -396,7 +420,7 @@ class VideoProcessor(QObject):
                     self.frame_display_timer.start()
                     self.gpu_memory_update_timer.start(5000)
                     return
-            
+
             self.processing = True
             self.frames_to_display.clear()
             self.threads.clear()
@@ -410,7 +434,7 @@ class VideoProcessor(QObject):
             self.frame_display_timer.timeout.connect(self.display_next_webcam_frame)
             self.frame_display_timer.start()
             self.gpu_memory_update_timer.start(5000)
-            print(f"[WebRTC] Started processing with interval {interval}ms")
+            print(f"[{label}] Started processing with interval {interval}ms")
 
     def process_next_frame(self):
         """Read the next frame and add it to the queue for processing."""
@@ -505,7 +529,7 @@ class VideoProcessor(QObject):
                 else:
                     print("Unable to read Webcam frame!")
 
-        elif self.file_type == 'webrtc' and self.webrtc_shm is not None:
+        elif self.file_type in ('webrtc', 'whip') and self.webrtc_shm is not None:
             try:
                 w = struct.unpack_from("<I", self.webrtc_shm.buf, 4)[0]
                 h = struct.unpack_from("<I", self.webrtc_shm.buf, 8)[0]
@@ -539,11 +563,33 @@ class VideoProcessor(QObject):
                 print("[Webcam] Unable to read frame, stopping.")
                 self.stop_processing()
 
-    def process_next_webrtc_frame(self):
-        """Read the latest frame from the WebRTC shared memory buffer."""
+    def _process_next_ingester_frame(self):
+        """Read the next frame from the UDPIngester queue."""
         if self.frame_queue.qsize() >= self.num_threads:
             return
-        if self.file_type != 'webrtc' or self.webrtc_shm is None:
+        ingester = getattr(self, '_ingester', None)
+        if ingester is None:
+            return
+        if not ingester.running:
+            if self.processing:
+                print(f"[VP] UDP ingester stopped — ending playback")
+                self.stop_processing()
+            return
+        try:
+            frame_bgr = ingester.frame_queue.get_nowait()
+        except Exception:
+            return
+        frame_rgb = frame_bgr[..., ::-1]
+        frame_rgb = self._apply_streaming_transforms(frame_rgb)
+        self.frame_queue.put(self.current_frame_number)
+        self.start_frame_worker(self.current_frame_number, frame_rgb)
+        self.current_frame_number += 1
+
+    def process_next_webrtc_frame(self):
+        """Read the latest frame from the WebRTC/WHIP shared memory buffer."""
+        if self.frame_queue.qsize() >= self.num_threads:
+            return
+        if self.file_type not in ('webrtc', 'whip') or self.webrtc_shm is None:
             return
         try:
             counter = struct.unpack_from("<I", self.webrtc_shm.buf, 0)[0]
@@ -568,7 +614,7 @@ class VideoProcessor(QObject):
 
     def _try_attach_webrtc_shm(self):
         """Poll for shared memory availability, then switch to frame reading."""
-        if self.file_type != 'webrtc' or not self.processing:
+        if self.file_type not in ('webrtc', 'whip') or not self.processing:
             return
         try:
             from multiprocessing.shared_memory import SharedMemory
@@ -596,7 +642,7 @@ class VideoProcessor(QObject):
             rotation = getattr(mw, 'webcam_rotation', 0)
             flip_h   = getattr(mw, 'webcam_flip_h', False)
             flip_v   = getattr(mw, 'webcam_flip_v', False)
-        elif self.file_type == 'webrtc':
+        elif self.file_type in ('webrtc', 'whip'):
             rotation = getattr(mw, 'webrtc_rotation', 0)
             flip_h   = getattr(mw, 'webrtc_flip_h', False)
             flip_v   = getattr(mw, 'webrtc_flip_v', False)
@@ -656,7 +702,7 @@ class VideoProcessor(QObject):
         print("Stopping video processing.")
         self.processing = False
         
-        if self.file_type=='video' or self.file_type=='webcam' or self.file_type=='webrtc':
+        if self.file_type=='video' or self.file_type=='webcam' or self.file_type in ('webrtc', 'whip') or self.file_type == 'udp':
 
             # print("Stopping Timers")
             self.frame_read_timer.stop()

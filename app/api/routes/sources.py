@@ -282,7 +282,6 @@ def set_transform(
     elif vp.file_type == "webrtc":
         state.webrtc_transform = transform
     else:
-        # video, image, or no source — store in media_transform
         state.media_transform = transform
     vp.process_current_frame()
     return OkResponse(message="Transform updated")

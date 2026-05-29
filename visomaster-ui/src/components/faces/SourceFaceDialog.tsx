@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type KeyboardEvent } from 'react'
 import { FolderOpen, RefreshCw, Search, FolderTree } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store/appStore'
 import { api } from '@/api/client'
@@ -128,7 +129,7 @@ export function SourceFaceDialog({ onSelect, onClose, disabledIds }: Props) {
             <TooltipContent>{isDesktop ? 'Browse for folder' : 'Select folder'}</TooltipContent>
           </Tooltip>
 
-          <input
+          <Input
             ref={pathInputRef}
             value={folderPath}
             onChange={e => setFolderPath(e.target.value)}
@@ -139,7 +140,7 @@ export function SourceFaceDialog({ onSelect, onClose, disabledIds }: Props) {
             }}
             placeholder="Paste or type folder path…"
             spellCheck={false}
-            className="flex-1 min-w-0 px-2 py-1 text-xs bg-muted border border-border rounded text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+            className="flex-1 min-w-0 font-mono"
           />
 
           <Tooltip>
@@ -176,11 +177,11 @@ export function SourceFaceDialog({ onSelect, onClose, disabledIds }: Props) {
         {/* Search row */}
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground size-3" />
-          <input
+          <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by filename…"
-            className="w-full pl-6 pr-2 py-1 text-xs bg-muted border border-border rounded text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full pl-6 pr-2"
           />
         </div>
 

@@ -124,6 +124,22 @@ interface AppStore {
 
   virtCamEnabled: boolean
   setVirtCamEnabled: (v: boolean) => void
+
+  // UDP streaming
+  udpInputRunning: boolean
+  setUdpInputRunning: (v: boolean) => void
+  udpInputUrl: string
+  setUdpInputUrl: (v: string) => void
+  udpOutputRunning: boolean
+  setUdpOutputRunning: (v: boolean) => void
+  udpOutputUrl: string
+  setUdpOutputUrl: (v: string) => void
+
+  // WebSocket output streaming
+  wsOutputRunning: boolean
+  setWsOutputRunning: (v: boolean) => void
+  wsOutputUrl: string
+  setWsOutputUrl: (v: string) => void
 }
 
 const DEFAULT_BLOCKS = ['Face Similarity', 'Face Mask']
@@ -244,4 +260,18 @@ export const useAppStore = create<AppStore>((set) => ({
 
   virtCamEnabled: false,
   setVirtCamEnabled: (v) => set({ virtCamEnabled: v }),
+
+  udpInputRunning: false,
+  setUdpInputRunning: (v) => set({ udpInputRunning: v }),
+  udpInputUrl: '',
+  setUdpInputUrl: (v) => set({ udpInputUrl: v }),
+  udpOutputRunning: false,
+  setUdpOutputRunning: (v) => set({ udpOutputRunning: v }),
+  udpOutputUrl: '',
+  setUdpOutputUrl: (v) => set({ udpOutputUrl: v }),
+
+  wsOutputRunning: false,
+  setWsOutputRunning: (v) => set({ wsOutputRunning: v }),
+  wsOutputUrl: '',
+  setWsOutputUrl: (v) => set({ wsOutputUrl: v }),
 }))

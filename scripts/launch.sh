@@ -91,8 +91,35 @@ case "$MODE" in
         echo ""
 
         VITE_PORT="${VITE_PORT:-5173}"
+        UI_PID=""
 
-        # Use built dist if available, otherwise fall back to dev server
+        # Trap to kill background Vite process on exit
+        cleanup_webview() {
+            [[ -n "${UI_PID:-}" ]] && kill "$UI_PID" 2>/dev/null || true
+            wait 2>/dev/null || true
+        }
+        trap cleanup_webview EXIT INT TERM
+
+        # Helper: wait for Vite to be ready (up to 30 s)
+        wait_for_vite() {
+            local port="$1"
+            local retries=30
+            echo "  Waiting for Vite on port ${port}..."
+            for ((i=1; i<=retries; i++)); do
+                if command -v curl &>/dev/null; then
+                    curl -sf "http://localhost:${port}" > /dev/null 2>&1 && return 0
+                elif command -v wget &>/dev/null; then
+                    wget -q --spider "http://localhost:${port}" > /dev/null 2>&1 && return 0
+                else
+                    # No curl/wget — just sleep and hope
+                    sleep 3; return 0
+                fi
+                sleep 1
+            done
+            echo "  [WARN] Vite did not respond after ${retries}s — continuing anyway."
+        }
+
+        # Use built dist if available, otherwise start dev server
         if [[ -d "visomaster-ui/dist" ]]; then
             echo "  [1/2] Built dist found — starting Vite preview server..."
             if command -v bun &>/dev/null; then
@@ -104,20 +131,23 @@ case "$MODE" in
                 exit 1
             fi
             UI_PID=$!
-            sleep 2
+            wait_for_vite "$VITE_PORT"
         else
-            echo "  NOTE: No dist build found — Vite dev server must be running."
-            echo "  Run: cd visomaster-ui && bun run dev"
-            echo ""
-            if command -v curl &>/dev/null; then
-                if ! curl -sf "http://localhost:${VITE_PORT}" > /dev/null 2>&1; then
-                    echo "  [WARN] Vite dev server not detected on port ${VITE_PORT}."
-                    echo "         Start it first or the webview will show a blank page."
-                    echo ""
-                fi
+            echo "  [1/2] No dist build found — starting Vite dev server..."
+            if command -v bun &>/dev/null; then
+                (cd visomaster-ui && bun run dev --port "$VITE_PORT") &
+            elif command -v npm &>/dev/null; then
+                (cd visomaster-ui && npm run dev -- --port "$VITE_PORT") &
+            else
+                echo "  [ERROR] bun or npm required. Install bun: https://bun.sh"
+                exit 1
             fi
+            UI_PID=$!
+            wait_for_vite "$VITE_PORT"
         fi
 
+        echo "  [2/2] Starting Qt WebView..."
+        echo ""
         exec $PYTHON web_main.py "${EXTRA_ARGS[@]}"
         ;;
 

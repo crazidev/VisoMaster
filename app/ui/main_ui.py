@@ -63,7 +63,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         def _on_frame_done(frame_number: int, frame_bgr, is_single_frame: bool):
             from app.ui.widgets.actions import common_actions as cwa
             pixmap = cwa.get_pixmap_from_frame(self, frame_bgr)
-            if self.video_processor.file_type in ('webcam', 'webrtc') and not is_single_frame:
+            if self.video_processor.file_type in ('webcam', 'webrtc', 'whip') and not is_single_frame:
                 self.video_processor.webcam_frame_processed_signal.emit(pixmap, frame_bgr)
             elif not is_single_frame:
                 self.video_processor.frame_processed_signal.emit(frame_number, pixmap, frame_bgr)
@@ -127,6 +127,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # Preview window with seeker + playback controls (initialized lazily)
         self._preview_window = None
+
+        # UDP ingester and output (created lazily)
+        self._udp_ingester = None
+        self._udp_output   = None
+        self._udp_output_orig_cb = None
 
         self.gpu_memory_update_signal.connect(partial(common_widget_actions.set_gpu_memory_progressbar_value, self))
         self.placeholder_update_signal.connect(partial(common_widget_actions.update_placeholder_visibility, self))
@@ -353,6 +358,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.webrtc_server_process.terminate()
             self.webrtc_server_process.join(timeout=3)
             self.webrtc_server_process = None
+        if getattr(self, "_udp_ingester", None) is not None:
+            self._udp_ingester.stop()
+            self._udp_ingester = None
+        if getattr(self, "_udp_output", None) is not None:
+            self._udp_output.stop()
+            self._udp_output = None
 
         save_load_actions.save_current_workspace(self, 'last_workspace.json')
         # Optionally handle the event if needed

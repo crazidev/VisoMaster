@@ -14,6 +14,9 @@ PYTHON=$CONDA_DIR/envs/$CONDA_ENV/bin/python3
 API_PORT=${API_PORT:-8000}
 FILEBROWSER_PORT=${FILEBROWSER_PORT:-8585}
 STREAMRELAY_PORT=${STREAMRELAY_PORT:-9091}
+WS_OUTPUT_PORT=${WS_OUTPUT_PORT:-8765}
+UDP_INPUT_PORT=${UDP_INPUT_PORT:-5000}
+UDP_OUTPUT_PORT=${UDP_OUTPUT_PORT:-5001}
 
 LOG_DIR=/workspace/logs
 mkdir -p $LOG_DIR
@@ -79,14 +82,29 @@ filebrowser \
 echo "[services] filebrowser PID=$!"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
+LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+TS_IP="${TAILSCALE_IP:-}"
+
 echo ""
 echo "============================================================"
 echo "  VisoMaster Services"
 echo "============================================================"
 echo "  VisoMaster Web UI:  http://localhost:$API_PORT"
+echo "  WS Preview stream:  ws://localhost:$WS_OUTPUT_PORT/ws/preview"
+echo "  UDP input:          udp://0.0.0.0:$UDP_INPUT_PORT  (push MPEG-TS here)"
+echo "  UDP output:         udp://127.0.0.1:$UDP_OUTPUT_PORT (pull MPEG-TS)"
+echo "  streamrelay WebRTC: http://localhost:$STREAMRELAY_PORT"
 echo "  filebrowser:        http://localhost:$FILEBROWSER_PORT"
 echo "  noVNC desktop:      http://localhost:${NO_VNC_PORT:-6901}/vnc.html"
-echo "  streamrelay WebRTC: http://localhost:$STREAMRELAY_PORT"
+echo "------------------------------------------------------------"
+echo "  Local IP:           $LOCAL_IP"
+if [ -n "$TS_IP" ]; then
+echo "  Tailscale IP:       $TS_IP"
+echo "  VisoMaster (TS):    http://${TS_IP}:$API_PORT"
+echo "  WS Preview (TS):    ws://${TS_IP}:$WS_OUTPUT_PORT/ws/preview"
+echo "  WebRTC WHIP (TS):   http://${TS_IP}:$STREAMRELAY_PORT/whip"
+echo "  UDP input (TS):     udp://${TS_IP}:$UDP_INPUT_PORT"
+fi
 echo "============================================================"
 echo "  Logs: /workspace/logs/"
 echo ""

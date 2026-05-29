@@ -1,27 +1,16 @@
 /**
  * Shared singleton preview stream.
  *
- * Problem: multiple components (SourcePreview, OutputPanel) each used to open
- * their own WebSocket to /ws/preview. The backend encoded + sent the JPEG
- * twice, the browser decoded it twice — halving effective FPS.
+ * In Qt WebEngine mode (QWebChannel), frames arrive via the bridge's
+ * framePositionChanged signal — no WebSocket needed. The service detects
+ * the runtime and skips the WebSocket connection entirely.
  *
- * Solution: one WebSocket, one decode pipeline, N canvases.
- *
- * Architecture:
- *   PreviewStreamService  — module-level singleton
- *     • Owns the single WebSocket connection
- *     • Decodes each incoming JPEG with createImageBitmap (off main thread)
- *     • Stores the latest ImageBitmap in a slot
- *     • Runs one shared requestAnimationFrame loop that paints all registered
- *       canvases and updates the shared FPS counter
- *
- *   usePreviewStream(quality?)  — React hook
- *     • Registers a canvas ref with the service on mount, unregisters on unmount
- *     • Returns { canvasRef, isConnected, previewFps }
- *     • Re-renders only when isConnected or previewFps changes — never on frames
+ * In HTTP/headless mode, a single WebSocket to /ws/preview is shared by
+ * all canvases to avoid double-encoding on the backend.
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { isDesktop } from '@/transport'
 
 // ─── Singleton service ────────────────────────────────────────────────────────
 
@@ -51,15 +40,21 @@ class PreviewStreamService {
   // Current quality setting (sent to server on connect / change)
   private quality = 85
 
+  // Whether we're in Qt desktop mode (no WebSocket needed)
+  private readonly _isQtMode: boolean
+
   constructor() {
-    this.connect()
+    this._isQtMode = isDesktop
+    if (!this._isQtMode) {
+      this.connect()
+    }
     this.startPaintLoop()
   }
 
   // ── Connection ──────────────────────────────────────────────────────────
 
   private connect() {
-    if (this._destroyed) return
+    if (this._destroyed || this._isQtMode) return
     this.ws = new WebSocket(WS_URL)
     this.ws.binaryType = 'arraybuffer'
 
@@ -73,7 +68,6 @@ class PreviewStreamService {
       const blob = new Blob([e.data], { type: 'image/jpeg' })
       createImageBitmap(blob)
         .then((bitmap) => {
-          // Replace any pending bitmap that hasn't been painted yet
           this.pendingBitmap?.close()
           this.pendingBitmap = bitmap
         })
@@ -85,15 +79,13 @@ class PreviewStreamService {
     this.ws.onclose = (e) => {
       console.warn(`[PreviewStream] WebSocket closed (code=${e.code}, reason="${e.reason}")`)
       this.setConnected(false)
-      if (!this._destroyed) {
+      if (!this._destroyed && !this._isQtMode) {
         setTimeout(() => this.connect(), RECONNECT_DELAY_MS)
       }
     }
 
-    this.ws.onerror = (e) => {
-      console.error('[PreviewStream] WebSocket error:', e)
-      // onclose fires automatically after onerror — don't close manually
-      // to avoid triggering a double reconnect timer.
+    this.ws.onerror = () => {
+      // onclose fires automatically after onerror
     }
   }
 
@@ -112,6 +104,25 @@ class PreviewStreamService {
   setQuality(q: number) {
     this.quality = q
     this.sendQuality()
+  }
+
+  /**
+   * Push a frame from the Qt bridge (called when a JPEG data URI or raw
+   * ArrayBuffer arrives via QWebChannel). In Qt mode this is the only
+   * frame delivery path.
+   */
+  pushQtFrame(data: ArrayBuffer | Blob) {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'image/jpeg' })
+    createImageBitmap(blob)
+      .then((bitmap) => {
+        this.pendingBitmap?.close()
+        this.pendingBitmap = bitmap
+        // Mark as connected once we receive the first frame
+        this.setConnected(true)
+      })
+      .catch((err) => {
+        console.warn('[PreviewStream] Qt frame decode failed:', err)
+      })
   }
 
   // ── Paint loop ──────────────────────────────────────────────────────────
@@ -161,7 +172,7 @@ class PreviewStreamService {
 
   subscribeConnected(fn: (v: boolean) => void): () => void {
     this.connectedListeners.add(fn)
-    fn(this._isConnected) // fire immediately with current state
+    fn(this._isConnected)
     return () => this.connectedListeners.delete(fn)
   }
 
@@ -173,6 +184,7 @@ class PreviewStreamService {
 
   get isConnected() { return this._isConnected }
   get fps() { return this._fps }
+  get isQtMode() { return this._isQtMode }
 }
 
 // Module-level singleton — created once, shared by all hook instances
@@ -180,24 +192,15 @@ const service = new PreviewStreamService()
 
 // ─── React hook ───────────────────────────────────────────────────────────────
 
-/**
- * Attach a canvas to the shared preview stream.
- *
- * @param quality  JPEG quality sent to the server (1-100, default 85)
- * @returns { canvasRef, isConnected, previewFps }
- */
 export function usePreviewStream(quality = 85) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isConnected, setIsConnected] = useState(service.isConnected)
   const [previewFps, setPreviewFps] = useState(service.fps)
 
-  // Update quality on the shared service whenever it changes
   useEffect(() => {
     service.setQuality(quality)
   }, [quality])
 
-  // Register / unregister this canvas with the shared paint loop.
-  // No dependency array — re-runs every render so the ref is always current.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -205,15 +208,16 @@ export function usePreviewStream(quality = 85) {
     return () => service.unregisterCanvas(canvas)
   })
 
-  // Subscribe to connection state changes
   useEffect(() => {
     return service.subscribeConnected(setIsConnected)
   }, [])
 
-  // Subscribe to FPS updates
   useEffect(() => {
     return service.subscribeFps(setPreviewFps)
   }, [])
 
   return { canvasRef, isConnected, previewFps }
 }
+
+// Export service for Qt bridge to push frames into
+export { service as previewStreamService }
