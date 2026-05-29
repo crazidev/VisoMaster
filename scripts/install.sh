@@ -135,9 +135,19 @@ else
     fi
 fi
 
-# ── Step 2: System dependencies (Linux only) ──────────────────────────────────
+# ── Step 2: Git submodules ────────────────────────────────────────────────────
+echo "[2/5] Initializing git submodules..."
+if command -v git &>/dev/null; then
+    git submodule update --init --recursive
+    echo "      Done."
+else
+    echo "      [WARN] git not found — skipping submodule init."
+    echo "             Run 'git submodule update --init --recursive' manually."
+fi
+
+# ── Step 3: System dependencies (Linux only) ──────────────────────────────────
 if [[ "$OS" == "linux" ]]; then
-    echo "[2/5] Installing system dependencies..."
+    echo "[3/6] Installing system dependencies..."
     if command -v apt-get &>/dev/null; then
         apt-get update -qq
         apt-get install -y -qq \
@@ -151,7 +161,7 @@ if [[ "$OS" == "linux" ]]; then
     fi
     echo "      Done."
 elif [[ "$OS" == "macos" ]]; then
-    echo "[2/5] Installing system dependencies (macOS)..."
+    echo "[3/6] Installing system dependencies (macOS)..."
     if command -v brew &>/dev/null; then
         brew install ffmpeg || true
     else
@@ -159,7 +169,7 @@ elif [[ "$OS" == "macos" ]]; then
     fi
     echo "      Done."
 else
-    echo "[2/5] Windows detected — skipping system package install."
+    echo "[3/6] Windows detected — skipping system package install."
     echo "      Ensure ffmpeg is available in PATH or in dependencies/."
 fi
 
@@ -171,7 +181,7 @@ if [[ ! -f "$REQUIREMENTS" ]]; then
     exit 1
 fi
 
-echo "[3/5] Installing Python dependencies from $REQUIREMENTS..."
+echo "[4/6] Installing Python dependencies from $REQUIREMENTS..."
 $PYTHON -m pip install $PIP_FLAGS --upgrade pip --quiet
 $PYTHON -m pip install $PIP_FLAGS -r "$REQUIREMENTS"
 echo "      Done."
@@ -207,7 +217,7 @@ install_bun() {
 }
 
 # ── Step 4: Frontend dependencies ─────────────────────────────────────────────
-echo "[4/5] Installing frontend dependencies (visomaster-ui)..."
+echo "[5/6] Installing frontend dependencies (visomaster-ui)..."
 if [[ -d "visomaster-ui" ]]; then
     if ! command -v bun &>/dev/null; then
         install_bun
@@ -229,7 +239,7 @@ else
 fi
 
 # ── Step 5: Download models ───────────────────────────────────────────────────
-echo "[5/5] Downloading models (mode: $MODEL_MODE)..."
+echo "[6/6] Downloading models (mode: $MODEL_MODE)..."
 $PYTHON download_models.py --mode "$MODEL_MODE"
 echo "      Done."
 
