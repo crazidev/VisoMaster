@@ -38,19 +38,17 @@ All three modes share the same Python inference backend and FastAPI server.
 One command to clone, install, and optionally launch on a fresh machine:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/crazidev/VisoMaster/main/scripts/bootstrap.sh)
+./scripts/bootstrap.sh
 ```
 
 With options:
 
 ```bash
 # CUDA 11.8, download all models, then launch in web mode
-bash <(curl -fsSL https://raw.githubusercontent.com/crazidev/VisoMaster/main/scripts/bootstrap.sh) \
-  --cuda 118 --full --mode web --launch
+./scripts/bootstrap.sh --cuda 118 --full --mode web --launch
 
 # Clone to a specific directory
-bash <(curl -fsSL https://raw.githubusercontent.com/crazidev/VisoMaster/main/scripts/bootstrap.sh) \
-  --dir /workspace/visomaster --mode webview --launch
+./scripts/bootstrap.sh --dir /workspace/visomaster --mode webview --launch
 ```
 
 | Option | Default | Description |

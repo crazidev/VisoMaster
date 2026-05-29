@@ -84,6 +84,9 @@ fi
 
 cd "$INSTALL_DIR"
 
+// Ensure scripts are executable
+chmod +x scripts/*
+
 # ── Step 3: Run install script ────────────────────────────────────────────────
 echo "[2/2] Running install script..."
 echo ""
