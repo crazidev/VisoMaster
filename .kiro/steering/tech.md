@@ -18,7 +18,7 @@ All modes use the same `app/processors/` inference pipeline and `app/core/state.
 |---|---|
 | UI framework | PySide6 6.8 |
 | Web engine | PySide6.QtWebEngineWidgets + QWebChannel |
-| Inference engine | onnxruntime-gpu 1.20 |
+| Inference engine | onnxruntime-gpu 1.19.2 (CUDA 12.4) / 1.18.0 (CUDA 11.8) |
 | GPU acceleration | PyTorch 2.4 + CUDA 12.4 (or 11.8) |
 | TensorRT | tensorrt 10.6 (optional, auto-detected) |
 | Computer vision | opencv-python 4.10 |

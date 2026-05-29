@@ -74,11 +74,13 @@ if __name__ == "__main__":
     args, qt_argv = _parse_args(sys.argv[1:])
 
     # Qt WebEngine (Chromium) refuses to run as root without --no-sandbox.
-    # Inject the flag automatically when running as root on Linux/macOS.
+    # Set the env var before QApplication is created — this is the only
+    # reliable way to pass Chromium flags on Linux.
     import os
     if sys.platform != "win32" and os.getuid() == 0:
-        if "--no-sandbox" not in qt_argv:
-            qt_argv.append("--no-sandbox")
+        flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        if "--no-sandbox" not in flags:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (flags + " --no-sandbox").strip()
 
     app = QtWidgets.QApplication([sys.argv[0], *qt_argv])
 

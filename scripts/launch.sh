@@ -72,6 +72,18 @@ case "$(uname -s)" in
         fi ;;
 esac
 
+# ── Helper: free a TCP port ───────────────────────────────────────────────────
+free_port() {
+    local port="$1"
+    if command -v fuser &>/dev/null; then
+        fuser -k "${port}/tcp" 2>/dev/null || true
+    elif command -v lsof &>/dev/null; then
+        local pids
+        pids=$(lsof -ti:"${port}" 2>/dev/null) || true
+        [[ -n "$pids" ]] && kill -9 $pids 2>/dev/null || true
+    fi
+}
+
 echo ""
 echo "============================================================"
 echo "  VisoMaster — mode: $MODE"
@@ -92,6 +104,9 @@ case "$MODE" in
 
         VITE_PORT="${VITE_PORT:-5173}"
         UI_PID=""
+
+        # Free the port before starting Vite
+        free_port "$VITE_PORT"
 
         # Trap to kill background Vite process on exit
         cleanup_webview() {
@@ -176,6 +191,7 @@ case "$MODE" in
 
         # Use built dist if available, otherwise fall back to dev server
         VITE_PORT="${VITE_PORT:-5173}"
+        free_port "$VITE_PORT"
         if [[ -d "visomaster-ui/dist" ]]; then
             echo "  [2/2] Built dist found — starting Vite preview server..."
             if command -v bun &>/dev/null; then

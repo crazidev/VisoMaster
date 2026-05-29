@@ -13,20 +13,26 @@
 # CUDA versions:
 #   --cuda 124  Use CUDA 12.4 requirements (default)
 #   --cuda 118  Use CUDA 11.8 requirements (older GPUs)
+#
+# Conda environment:
+#   Creates and uses a conda env named "visomaster" (Python 3.10.13).
+#   If conda is not available, falls back to the active Python interpreter.
 # =============================================================================
 
 set -euo pipefail
 
-# ── Defaults ─────────────────────────────────────────────────────────────────
+# ── Defaults ──────────────────────────────────────────────────────────────────
 MODEL_MODE="dev"
 CUDA_VER="124"
+CONDA_ENV_NAME="visomaster"
+CONDA_PYTHON_VERSION="3.10.13"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dev)   MODEL_MODE="dev";  shift ;;
-        --full)  MODEL_MODE="full"; shift ;;
-        --cuda)  CUDA_VER="$2";     shift 2 ;;
+        --dev)    MODEL_MODE="dev";  shift ;;
+        --full)   MODEL_MODE="full"; shift ;;
+        --cuda)   CUDA_VER="$2";     shift 2 ;;
         --cuda=*) CUDA_VER="${1#*=}"; shift ;;
         -h|--help)
             echo "Usage: bash scripts/install.sh [--dev|--full] [--cuda 124|--cuda 118]"
@@ -38,7 +44,7 @@ done
 # ── Detect OS ─────────────────────────────────────────────────────────────────
 OS="linux"
 case "$(uname -s)" in
-    Darwin*)  OS="macos" ;;
+    Darwin*)              OS="macos" ;;
     MINGW*|MSYS*|CYGWIN*) OS="windows" ;;
 esac
 
@@ -47,28 +53,87 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-# ── Detect Python ─────────────────────────────────────────────────────────────
-if command -v python3 &>/dev/null; then
-    PYTHON="python3"
-elif command -v python &>/dev/null; then
-    PYTHON="python"
-else
-    echo "[ERROR] Python not found. Install Python 3.10+ or activate your conda environment first."
-    exit 1
-fi
-
-# ── Detect pip flags ──────────────────────────────────────────────────────────
-PIP_FLAGS=""
-if [[ "$EUID" -eq 0 ]] && [[ -z "${CONDA_DEFAULT_ENV:-}" ]]; then
-    PIP_FLAGS="--break-system-packages"
-fi
-
 echo ""
 echo "============================================================"
 echo "  VisoMaster Installer"
 echo "  OS: $OS | CUDA: $CUDA_VER | Models: $MODEL_MODE"
 echo "============================================================"
 echo ""
+
+# ── Step 1: Conda environment ─────────────────────────────────────────────────
+# Locate conda — checks CONDA_EXE, common install paths, and PATH.
+find_conda() {
+    if [[ -n "${CONDA_EXE:-}" ]] && [[ -x "$CONDA_EXE" ]]; then
+        echo "$CONDA_EXE"; return 0
+    fi
+    local candidates=(
+        "$HOME/miniconda3/bin/conda"
+        "$HOME/anaconda3/bin/conda"
+        "$HOME/miniforge3/bin/conda"
+        "/opt/conda/bin/conda"
+        "/usr/local/conda/bin/conda"
+    )
+    for c in "${candidates[@]}"; do
+        [[ -x "$c" ]] && { echo "$c"; return 0; }
+    done
+    command -v conda 2>/dev/null && return 0
+    return 1
+}
+
+CONDA_BIN=""
+if CONDA_BIN=$(find_conda); then
+    echo "[1/5] Conda found: $CONDA_BIN"
+
+    # Source conda's shell integration so 'conda activate' works in this script
+    CONDA_BASE=$("$CONDA_BIN" info --base 2>/dev/null)
+    # shellcheck disable=SC1091
+    source "${CONDA_BASE}/etc/profile.d/conda.sh" 2>/dev/null || true
+
+    # Create the env if it doesn't exist yet
+    if "$CONDA_BIN" env list | grep -qE "^${CONDA_ENV_NAME}\s"; then
+        echo "      Conda env '${CONDA_ENV_NAME}' already exists — skipping creation."
+    else
+        echo "      Creating conda env '${CONDA_ENV_NAME}' (Python ${CONDA_PYTHON_VERSION})..."
+        "$CONDA_BIN" create -n "$CONDA_ENV_NAME" python="$CONDA_PYTHON_VERSION" -y
+        echo "      Done."
+    fi
+
+    # Install CUDA runtime + cuDNN into the env (CUDA 12.4 only; 11.8 ships its own)
+    if [[ "$CUDA_VER" == "124" ]]; then
+        echo "      Installing CUDA 12.4 runtime + cuDNN into conda env..."
+        "$CONDA_BIN" install -n "$CONDA_ENV_NAME" -c "nvidia/label/cuda-12.4.1" cuda-runtime -y --quiet || true
+        "$CONDA_BIN" install -n "$CONDA_ENV_NAME" -c conda-forge cudnn -y --quiet || true
+        echo "      Done."
+    fi
+
+    # Point PYTHON at the env's interpreter for all subsequent steps
+    CONDA_ENV_PREFIX=$("$CONDA_BIN" run -n "$CONDA_ENV_NAME" python -c "import sys; print(sys.prefix)")
+    PYTHON="${CONDA_ENV_PREFIX}/bin/python"
+    [[ -x "$PYTHON" ]] || PYTHON="${CONDA_ENV_PREFIX}/bin/python3"
+    PIP_FLAGS=""
+
+    echo "      Using Python: $PYTHON"
+else
+    echo "[1/5] Conda not found — falling back to active Python interpreter."
+    echo "      To use conda, install Miniconda: https://docs.conda.io/en/latest/miniconda.html"
+    echo ""
+
+    # Fallback: use whatever python is on PATH
+    if command -v python3 &>/dev/null; then
+        PYTHON="python3"
+    elif command -v python &>/dev/null; then
+        PYTHON="python"
+    else
+        echo "[ERROR] Python not found. Install Python 3.10+ or conda first."
+        exit 1
+    fi
+
+    # Need --break-system-packages when running as root outside conda on modern distros
+    PIP_FLAGS=""
+    if [[ "$EUID" -eq 0 ]] && [[ -z "${CONDA_DEFAULT_ENV:-}" ]]; then
+        PIP_FLAGS="--break-system-packages"
+    fi
+fi
 
 # ── Step 2: System dependencies (Linux only) ──────────────────────────────────
 if [[ "$OS" == "linux" ]]; then
@@ -83,8 +148,6 @@ if [[ "$OS" == "linux" ]]; then
     elif command -v yum &>/dev/null; then
         yum install -y python3-pip python3-devel ffmpeg mesa-libGL glib2 \
             > /dev/null 2>&1 || true
-    elif command -v brew &>/dev/null; then
-        : # macOS — handled below
     fi
     echo "      Done."
 elif [[ "$OS" == "macos" ]]; then
@@ -118,19 +181,15 @@ install_bun() {
     echo "      bun not found — installing bun..."
 
     if [[ "$OS" == "macos" ]] && command -v brew &>/dev/null; then
-        # Homebrew is the cleanest path on macOS
         brew tap oven-sh/bun
         brew install bun
     elif command -v curl &>/dev/null; then
-        # Official install script (Linux, macOS, Git Bash / MSYS2 / WSL on Windows)
-        # Requires: unzip
         if [[ "$OS" == "linux" ]] && command -v apt-get &>/dev/null; then
             apt-get install -y -qq unzip > /dev/null 2>&1 || true
         elif [[ "$OS" == "linux" ]] && command -v yum &>/dev/null; then
             yum install -y unzip > /dev/null 2>&1 || true
         fi
         curl -fsSL https://bun.sh/install | bash
-        # The installer drops bun into ~/.bun/bin — add it to PATH for the rest of this script
         export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
         export PATH="$BUN_INSTALL/bin:$PATH"
     else
@@ -150,7 +209,6 @@ install_bun() {
 # ── Step 4: Frontend dependencies ─────────────────────────────────────────────
 echo "[4/5] Installing frontend dependencies (visomaster-ui)..."
 if [[ -d "visomaster-ui" ]]; then
-    # Ensure bun is available, installing it if necessary
     if ! command -v bun &>/dev/null; then
         install_bun
     fi
@@ -183,6 +241,11 @@ echo ""
 echo "  Copy .env.example to .env and fill in your credentials:"
 echo "    cp .env.example .env"
 echo ""
+if [[ -n "$CONDA_BIN" ]]; then
+echo "  Activate the conda environment before launching:"
+echo "    conda activate ${CONDA_ENV_NAME}"
+echo ""
+fi
 echo "  Launch VisoMaster:"
 echo "    bash scripts/launch.sh --mode qt          # Native Qt UI"
 echo "    bash scripts/launch.sh --mode webview     # Qt + embedded web UI"
